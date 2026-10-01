@@ -42,6 +42,7 @@ import type { IssueType } from '../../Services/reportService';
 // ============================================
 interface ReportFormData {
   location: string;
+  zone: string; // ADDED
   issueType: string;
   description: string;
   contactName: string;
@@ -51,6 +52,7 @@ interface ReportFormData {
 
 const INITIAL_FORM: ReportFormData = {
   location: '',
+  zone: '', // ADDED
   issueType: '',
   description: '',
   contactName: '',
@@ -65,8 +67,20 @@ const ISSUE_TYPES = [
   { value: 'other', label: 'Other Issue' },
 ];
 
-// ✅ CHANGED: Max photos is now 3
-const MAX_PHOTOS = 3;
+// ADDED: Zone options with their suburbs
+const ZONE_OPTIONS = [
+  { value: 'Zone 1', label: 'Zone 1 (5 Mile, 6 Mile, Boroko)' },
+  { value: 'Zone 2', label: 'Zone 2 (Erima, Gordons)' },
+  { value: 'Zone 3', label: 'Zone 3 (7 Mile, 8 Mile, 9 Mile, Bomana)' },
+  { value: 'Zone 4', label: 'Zone 4 (Gerehu, Morata, Waigani)' },
+  { value: 'Zone 5', label: 'Zone 5 (Hohola, Tokarara)' },
+  { value: 'Zone 6', label: 'Zone 6 (Badili, Koki, Konedobu)' },
+  { value: 'Zone 7', label: 'Zone 7 (4 Mile, Murray Barracks, 3 Mile)' },
+  { value: 'Zone 8', label: 'Zone 8 (Korobosea, Gabutu)' },
+  { value: 'Zone 9', label: 'Zone 9 (Sabama, Taurama)' },
+];
+
+const MAX_PHOTOS = 2;
 
 // ============================================
 // COMPONENT
@@ -108,9 +122,6 @@ export const CitizenPortal: React.FC = () => {
       setFormData({ ...formData, [field]: event.target.value as string });
     };
 
-  // ----------------------------------------
-  // PHOTO HANDLING
-  // ----------------------------------------
   const handlePhotoUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files;
     if (!files) return;
@@ -147,9 +158,6 @@ export const CitizenPortal: React.FC = () => {
     setPhotoUrls(newUrls);
   };
 
-  // ----------------------------------------
-  // GEOLOCATION
-  // ----------------------------------------
   const handleUseCurrentLocation = () => {
     if (!navigator.geolocation) {
       showSnackbar('Geolocation is not supported by your browser', 'warning');
@@ -173,12 +181,14 @@ export const CitizenPortal: React.FC = () => {
     );
   };
 
-  // ----------------------------------------
-  // SUBMIT (REAL API CALLS)
-  // ----------------------------------------
   const handleSubmit = async () => {
+    // UPDATED: Now requires 'zone'
     if (!formData.location.trim()) {
       showSnackbar('Please enter a location', 'warning');
+      return;
+    }
+    if (!formData.zone) {
+      showSnackbar('Please select a zone', 'warning');
       return;
     }
     if (!formData.issueType) {
@@ -218,6 +228,7 @@ export const CitizenPortal: React.FC = () => {
         issueType: formData.issueType as IssueType,
         description: formData.description,
         address: formData.location,
+        zone: formData.zone, // ADDED
         latitude,
         longitude,
         photos: uploadedPhotoUrls,
@@ -253,9 +264,6 @@ export const CitizenPortal: React.FC = () => {
     }
   };
 
-  // ----------------------------------------
-  // CLEAR FORM
-  // ----------------------------------------
   const handleClearForm = () => {
     photoUrls.forEach((url) => URL.revokeObjectURL(url));
     setFormData(INITIAL_FORM);
@@ -268,7 +276,6 @@ export const CitizenPortal: React.FC = () => {
   // ============================================
   return (
     <Container maxWidth="lg" sx={{ py: 4 }}>
-      {/* Breadcrumbs */}
       <Breadcrumbs aria-label="breadcrumb" sx={{ mb: 2 }}>
         <Link
           underline="hover"
@@ -282,7 +289,6 @@ export const CitizenPortal: React.FC = () => {
       </Breadcrumbs>
 
       <Grid container spacing={3}>
-        {/* Header */}
         <Grid size={{ xs: 12 }}>
           <Paper sx={{ p: 3, bgcolor: 'primary.main', color: 'white' }}>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
@@ -300,7 +306,6 @@ export const CitizenPortal: React.FC = () => {
           </Paper>
         </Grid>
 
-        {/* Main Form */}
         <Grid size={{ xs: 12, md: 8 }}>
           <Card>
             <CardContent>
@@ -342,6 +347,24 @@ export const CitizenPortal: React.FC = () => {
                       My Location
                     </Button>
                   </Box>
+                </Grid>
+
+                {/* ADDED: Zone Selection */}
+                <Grid size={{ xs: 12 }}>
+                  <FormControl fullWidth required>
+                    <InputLabel>Zone *</InputLabel>
+                    <Select
+                      value={formData.zone}
+                      onChange={handleSelectChange('zone')}
+                      label="Zone *"
+                    >
+                      {ZONE_OPTIONS.map((zone) => (
+                        <MenuItem key={zone.value} value={zone.value}>
+                          {zone.label}
+                        </MenuItem>
+                      ))}
+                    </Select>
+                  </FormControl>
                 </Grid>
 
                 {/* Issue Type */}
@@ -419,9 +442,7 @@ export const CitizenPortal: React.FC = () => {
                   </Box>
 
                   {photoUrls.length > 0 && (
-                    <Box
-                      sx={{ display: 'flex', flexWrap: 'wrap', gap: 2, mt: 2 }}
-                    >
+                    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2, mt: 2 }}>
                       {photoUrls.map((url, index) => (
                         <Box
                           key={index}
@@ -503,7 +524,6 @@ export const CitizenPortal: React.FC = () => {
                 </Grid>
               </Grid>
 
-              {/* Buttons */}
               <Box sx={{ mt: 4, display: 'flex', gap: 2 }}>
                 <Button
                   variant="contained"
@@ -534,7 +554,6 @@ export const CitizenPortal: React.FC = () => {
           </Card>
         </Grid>
 
-        {/* Info Panel */}
         <Grid size={{ xs: 12, md: 4 }}>
           <Card>
             <CardContent>
@@ -548,7 +567,7 @@ export const CitizenPortal: React.FC = () => {
                   <strong>1. Describe the Issue</strong>
                 </Typography>
                 <Typography variant="caption" color="text.secondary">
-                  Provide location, issue type, and description
+                  Provide location, zone, issue type, and description
                 </Typography>
               </Box>
 
@@ -610,7 +629,6 @@ export const CitizenPortal: React.FC = () => {
         </Grid>
       </Grid>
 
-      {/* Snackbar */}
       <Snackbar
         open={snackbarOpen}
         autoHideDuration={6000}

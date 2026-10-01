@@ -17,6 +17,7 @@ export interface ReportData {
   issueType: IssueType;
   description: string;
   address: string;
+  zone?: string; // ADDED
   latitude?: number;
   longitude?: number;
   photos?: string[];
@@ -70,9 +71,6 @@ export interface Comment {
 // REPORT SERVICE
 // ============================================
 export const reportService = {
-  // ----------------------------------------
-  // CREATE REPORT
-  // ----------------------------------------
   createReport: async (
     data: ReportData
   ): Promise<{ message: string; report: Report }> => {
@@ -80,37 +78,26 @@ export const reportService = {
     return response.data;
   },
 
-  // ----------------------------------------
-  // GET MY REPORTS (citizen)
-  // ----------------------------------------
   getMyReports: async (): Promise<{ count: number; reports: Report[] }> => {
     const response = await api.get('/reports/my');
     return response.data;
   },
 
-  // ----------------------------------------
-  // GET MY STATS (citizen)
-  // ----------------------------------------
   getMyStats: async (): Promise<{ stats: ReportStats }> => {
     const response = await api.get('/reports/stats');
     return response.data;
   },
 
-  // ----------------------------------------
-  // GET REPORT BY ID
-  // ----------------------------------------
   getReportById: async (id: string): Promise<{ report: Report }> => {
     const response = await api.get(`/reports/${id}`);
     return response.data;
   },
 
-  // ----------------------------------------
-  // GET ALL REPORTS (admin)
-  // ----------------------------------------
   getAllReports: async (filters?: {
     status?: string;
     priority?: string;
     issueType?: string;
+    zone?: string; // ADDED
     limit?: number;
     offset?: number;
   }): Promise<{ total: number; reports: Report[] }> => {
@@ -118,9 +105,6 @@ export const reportService = {
     return response.data;
   },
 
-  // ----------------------------------------
-  // GET REPORT COUNTS (admin)
-  // ----------------------------------------
   getCounts: async (): Promise<{
     counts: {
       total: number;
@@ -134,9 +118,6 @@ export const reportService = {
     return response.data;
   },
 
-  // ----------------------------------------
-  // UPDATE REPORT STATUS (admin)
-  // ----------------------------------------
   updateReportStatus: async (
     id: string,
     status: ReportStatus,
@@ -149,9 +130,6 @@ export const reportService = {
     return response.data;
   },
 
-  // ----------------------------------------
-  // UPDATE REPORT (owner on pending, or admin)
-  // ----------------------------------------
   updateReport: async (
     id: string,
     data: Partial<ReportData>
@@ -160,17 +138,11 @@ export const reportService = {
     return response.data;
   },
 
-  // ----------------------------------------
-  // DELETE REPORT
-  // ----------------------------------------
   deleteReport: async (id: string): Promise<{ message: string }> => {
     const response = await api.delete(`/reports/${id}`);
     return response.data;
   },
 
-  // ----------------------------------------
-  // GET COMMENTS ON A REPORT
-  // ----------------------------------------
   getComments: async (
     reportId: string
   ): Promise<{ count: number; comments: Comment[] }> => {
@@ -178,9 +150,6 @@ export const reportService = {
     return response.data;
   },
 
-  // ----------------------------------------
-  // ADD COMMENT
-  // ----------------------------------------
   addComment: async (
     reportId: string,
     content: string,
@@ -190,6 +159,30 @@ export const reportService = {
       content,
       isInternal,
     });
+    return response.data;
+  },
+
+  createEmergencyAlert: async (data: {
+    emergencyType: string;
+    description: string;
+    latitude?: number;
+    longitude?: number;
+  }): Promise<{ message: string; report: Report }> => {
+    const { emergencyType, description, latitude, longitude } = data;
+
+    const fullDescription = `[🚨 DRIVER EMERGENCY] ${emergencyType}${
+      description ? `: ${description}` : ''
+    }`;
+
+    const response = await api.post('/reports', {
+      issueType: 'other',
+      description: fullDescription,
+      address: 'Driver reported location',
+      latitude,
+      longitude,
+      photos: [],
+    });
+
     return response.data;
   },
 };

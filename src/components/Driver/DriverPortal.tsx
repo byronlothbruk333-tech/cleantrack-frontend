@@ -23,6 +23,10 @@ import {
   CircularProgress,
   TextField,
   Fab,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem,
 } from '@mui/material';
 import {
   Route as RouteIcon,
@@ -43,6 +47,18 @@ import {
   type RouteStop,
 } from '../../Services/routeService';
 import { uploadService } from '../../Services/uploadService';
+import { reportService } from '../../Services/reportService';
+
+// ============================================
+// EMERGENCY TYPES
+// ============================================
+const EMERGENCY_TYPES = [
+  { value: 'breakdown', label: '🔧 Vehicle Breakdown' },
+  { value: 'accident', label: '🚗 Accident' },
+  { value: 'medical', label: '🚑 Medical Emergency' },
+  { value: 'security', label: '🚨 Security Threat' },
+  { value: 'other', label: '⚠️ Other Emergency' },
+];
 
 // ============================================
 // COMPONENT
@@ -67,6 +83,12 @@ export const DriverPortal: React.FC = () => {
   const [afterPhotoPreview, setAfterPhotoPreview] = useState<string>('');
   const fileInputRef = React.useRef<HTMLInputElement>(null);
 
+  // Emergency dialog state
+  const [openEmergencyDialog, setOpenEmergencyDialog] = useState(false);
+  const [emergencyType, setEmergencyType] = useState<string>('breakdown');
+  const [emergencyDescription, setEmergencyDescription] = useState('');
+  const [emergencySubmitting, setEmergencySubmitting] = useState(false);
+
   // ============================================
   // LOAD TODAY'S ROUTE
   // ============================================
@@ -79,8 +101,18 @@ export const DriverPortal: React.FC = () => {
 
       try {
         const data = await routeService.getTodaysRoute();
+        
+        // --- DEBUGGING ADDED HERE ---
+        console.log("🔍 API Response for Today's Route:", data);
+        // ----------------------------
+
         if (isMounted) {
-          setRoute(data.route);
+          // Check if data exists and has a route property
+          if (data && data.route) {
+            setRoute(data.route);
+          } else {
+            setRoute(null); // Explicitly set to null if no route
+          }
         }
       } catch (err: unknown) {
         const error = err as {
@@ -114,7 +146,11 @@ export const DriverPortal: React.FC = () => {
     setRefreshing(true);
     try {
       const data = await routeService.getTodaysRoute();
-      setRoute(data.route);
+      if (data && data.route) {
+        setRoute(data.route);
+      } else {
+        setRoute(null);
+      }
     } catch (err) {
       console.error('Refresh failed:', err);
     } finally {
@@ -287,6 +323,52 @@ export const DriverPortal: React.FC = () => {
       );
     } finally {
       setActionLoading(false);
+    }
+  };
+
+  // ============================================
+  // EMERGENCY DISPATCH
+  // ============================================
+  const handleOpenEmergencyDialog = () => {
+    setEmergencyType('breakdown');
+    setEmergencyDescription('');
+    setOpenEmergencyDialog(true);
+  };
+
+  const handleSendEmergency = async () => {
+    setEmergencySubmitting(true);
+    try {
+      // Get current stop location as reference
+      const currentStop = route?.stops?.find((s) => s.status === 'pending');
+      const latitude = currentStop?.latitude
+        ? Number(currentStop.latitude)
+        : -9.4438;
+      const longitude = currentStop?.longitude
+        ? Number(currentStop.longitude)
+        : 147.1803;
+
+      await reportService.createEmergencyAlert({
+        emergencyType:
+          EMERGENCY_TYPES.find((t) => t.value === emergencyType)?.label ||
+          emergencyType,
+        description: emergencyDescription,
+        latitude,
+        longitude,
+      });
+
+      setOpenEmergencyDialog(false);
+      alert('🚨 Emergency alert sent to dispatch successfully!');
+    } catch (err: unknown) {
+      const error = err as {
+        response?: { data?: { message?: string; error?: string } };
+      };
+      alert(
+        error.response?.data?.message ||
+          error.response?.data?.error ||
+          'Failed to send emergency alert. Please try calling dispatch directly.'
+      );
+    } finally {
+      setEmergencySubmitting(false);
     }
   };
 
@@ -915,11 +997,88 @@ export const DriverPortal: React.FC = () => {
         </DialogActions>
       </Dialog>
 
+      {/* Emergency Dispatch Dialog */}
+      <Dialog
+        open={openEmergencyDialog}
+        onClose={() => setOpenEmergencyDialog(false)}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle sx={{ bgcolor: 'error.main', color: 'white' }}>
+          🚨 Emergency Alert
+        </DialogTitle>
+        <DialogContent sx={{ pt: 3 }}>
+          <Alert severity="warning" sx={{ mb: 3 }}>
+            This will immediately notify dispatch and the administrator. Only
+            use in genuine emergencies.
+          </Alert>
+
+          <FormControl fullWidth sx={{ mb: 2 }}>
+            <InputLabel>Emergency Type *</InputLabel>
+            <Select
+              value={emergencyType}
+              onChange={(e) => setEmergencyType(e.target.value)}
+              label="Emergency Type *"
+            >
+              {EMERGENCY_TYPES.map((type) => (
+                <MenuItem key={type.value} value={type.value}>
+                  {type.label}
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+
+          <TextField
+            fullWidth
+            multiline
+            rows={3}
+            label="Additional Details (optional)"
+            value={emergencyDescription}
+            onChange={(e) => setEmergencyDescription(e.target.value)}
+            placeholder="Describe the situation briefly..."
+          />
+        </DialogContent>
+        <DialogActions sx={{ p: 2 }}>
+          <Button
+            onClick={() => setOpenEmergencyDialog(false)}
+            disabled={emergencySubmitting}
+          >
+            Cancel
+          </Button>
+          <Button
+            variant="contained"
+            color="error"
+            onClick={handleSendEmergency}
+            disabled={emergencySubmitting}
+            startIcon={
+              emergencySubmitting ? (
+                <CircularProgress size={20} color="inherit" />
+              ) : (
+                <Warning />
+              )
+            }
+          >
+            {emergencySubmitting ? 'Sending...' : 'Send Emergency Alert'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
       {/* Emergency FAB */}
       <Fab
         color="error"
-        sx={{ position: 'fixed', bottom: 24, right: 24 }}
-        onClick={() => alert('Emergency reported to dispatch!')}
+        sx={{
+          position: 'fixed',
+          bottom: 24,
+          right: 24,
+          animation: 'pulse 2s infinite',
+          '@keyframes pulse': {
+            '0%': { boxShadow: '0 0 0 0 rgba(244, 67, 54, 0.7)' },
+            '70%': { boxShadow: '0 0 0 20px rgba(244, 67, 54, 0)' },
+            '100%': { boxShadow: '0 0 0 0 rgba(244, 67, 54, 0)' },
+          },
+        }}
+        onClick={handleOpenEmergencyDialog}
+        title="Emergency Dispatch"
       >
         <Warning />
       </Fab>

@@ -26,6 +26,18 @@ export interface RouteStop {
   afterPhoto?: string | null;
 }
 
+export interface TruckInfo {
+  id: string;
+  truckId: string;
+  registrationNumber: string;
+  zone: string;
+  driver?: {
+    id: string;
+    name: string;
+    email: string;
+  } | null;
+}
+
 export interface Route {
   id: string;
   truckId: string;
@@ -40,12 +52,7 @@ export interface Route {
   completedStops: number;
   notes?: string | null;
   stops?: RouteStop[];
-  truck?: {
-    id: string;
-    truckId: string;
-    registrationNumber: string;
-    zone: string;
-  };
+  truck?: TruckInfo;
 }
 
 export interface CompleteStopResponse {
@@ -57,6 +64,13 @@ export interface CompleteStopResponse {
     progressPercent: number;
     routeStatus: RouteStatus;
   };
+}
+
+export interface GetAllRoutesResponse {
+  total: number;
+  limit: number;
+  offset: number;
+  routes: Route[];
 }
 
 // ============================================
@@ -72,10 +86,42 @@ export const routeService = {
   },
 
   // ----------------------------------------
+  // GET ALL ROUTES (admin)
+  // ----------------------------------------
+  getAllRoutes: async (filters?: {
+    status?: string;
+    zone?: string;
+    date?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<GetAllRoutesResponse> => {
+    const response = await api.get('/routes', { params: filters });
+    return response.data;
+  },
+
+  // ----------------------------------------
   // GET ROUTE BY ID
   // ----------------------------------------
-  getRouteById: async (id: string): Promise<{ route: Route }> => {
+  getRouteById: async (id: string | number): Promise<{ route: Route }> => {
     const response = await api.get(`/routes/${id}`);
+    return response.data;
+  },
+
+  // ----------------------------------------
+  // GET ROUTE BY TRUCK ID (NEW)
+  // Used in RouteView.tsx to fetch a specific truck's route
+  // ----------------------------------------
+  getRouteByTruckId: async (truckId: string): Promise<{ route: Route }> => {
+    const response = await api.get(`/routes/truck/${truckId}`);
+    return response.data;
+  },
+
+  // ----------------------------------------
+  // GET ROUTE BY DRIVER ID (NEW)
+  // Useful for admins looking up a specific driver's route
+  // ----------------------------------------
+  getRouteByDriverId: async (driverId: string): Promise<{ route: Route }> => {
+    const response = await api.get(`/routes/driver/${driverId}`);
     return response.data;
   },
 

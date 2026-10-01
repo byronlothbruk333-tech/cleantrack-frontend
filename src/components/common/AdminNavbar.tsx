@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
   AppBar,
   Toolbar,
@@ -11,7 +11,6 @@ import {
   Container,
   useTheme,
   Divider,
-  Badge,
   Dialog,
   DialogTitle,
   DialogContent,
@@ -26,13 +25,11 @@ import {
 } from '@mui/material';
 import {
   Menu as MenuIcon,
-  Notifications,
   Dashboard as DashboardIcon,
   ExitToApp,
   Map,
   LocalShipping,
   Settings,
-  Person,
 } from '@mui/icons-material';
 import { useAuth } from '../../Context/AuthContext';
 import { useNavigate } from 'react-router-dom';
@@ -49,10 +46,10 @@ export const AdminNavbar: React.FC<AdminNavbarProps> = ({ title = 'CleanTrack' }
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const [mobileAnchorEl, setMobileAnchorEl] = useState<null | HTMLElement>(null);
 
-  // ✅ Notification settings dialog
+  // Notification settings dialog
   const [notifSettingsOpen, setNotifSettingsOpen] = useState(false);
 
-  // ✅ Notification preferences (persisted in localStorage)
+  // Notification preferences (persisted in localStorage)
   const [emailAlerts, setEmailAlerts] = useState(
     localStorage.getItem('admin_email_alerts') !== 'false'
   );
@@ -113,9 +110,12 @@ export const AdminNavbar: React.FC<AdminNavbarProps> = ({ title = 'CleanTrack' }
 
   const getRoleLabel = (role: string) => {
     switch (role) {
-      case 'admin': return 'Administrator';
-      case 'management': return 'Management';
-      default: return 'Admin';
+      case 'admin':
+        return 'Administrator';
+      case 'management':
+        return 'Management';
+      default:
+        return 'Admin';
     }
   };
 
@@ -143,39 +143,47 @@ export const AdminNavbar: React.FC<AdminNavbarProps> = ({ title = 'CleanTrack' }
 
           {/* Right Section */}
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            {/* ✅ Notifications bell (goes to future emergency panel) */}
-            <IconButton color="inherit" onClick={handleOpenNotifSettings}>
-              <Badge badgeContent={0} color="error">
-                <Notifications />
-              </Badge>
-            </IconButton>
-
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-              <Typography variant="body2" sx={{ display: { xs: 'none', sm: 'block' } }}>
+              <Typography
+                variant="body2"
+                sx={{ display: { xs: 'none', sm: 'block' } }}
+              >
                 {user?.name}
-                <span style={{ opacity: 0.7, fontSize: '0.8rem', marginLeft: '4px' }}>
+                <span
+                  style={{
+                    opacity: 0.7,
+                    fontSize: '0.8rem',
+                    marginLeft: '4px',
+                  }}
+                >
                   ({getRoleLabel(user?.role || '')})
                 </span>
               </Typography>
               <IconButton onClick={handleMenuOpen} color="inherit">
-                <Avatar sx={{ width: 32, height: 32, bgcolor: theme.palette.secondary.main }}>
+                <Avatar
+                  sx={{
+                    width: 32,
+                    height: 32,
+                    bgcolor: theme.palette.secondary.main,
+                  }}
+                >
                   {user?.name?.charAt(0).toUpperCase() || 'A'}
                 </Avatar>
               </IconButton>
             </Box>
 
-            {/* ✅ Admin Profile Dropdown */}
+            {/* Admin Profile Dropdown */}
             <Menu
               anchorEl={anchorEl}
               open={Boolean(anchorEl)}
               onClose={handleMenuClose}
               anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
               transformOrigin={{ vertical: 'top', horizontal: 'right' }}
-              PaperProps={{ sx: { minWidth: 260 } }}
+              slotProps={{ paper: { sx: { minWidth: 260 } } }}
             >
               {/* Admin Info Header */}
               <Box sx={{ px: 2, py: 1.5 }}>
-                <Typography variant="subtitle2" fontWeight={600}>
+                <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
                   {user?.name}
                 </Typography>
                 <Typography variant="caption" color="text.secondary">
@@ -199,7 +207,10 @@ export const AdminNavbar: React.FC<AdminNavbarProps> = ({ title = 'CleanTrack' }
 
               <Divider />
 
-              <MenuItem onClick={handleLogout} sx={{ color: 'error.main', py: 1.5 }}>
+              <MenuItem
+                onClick={handleLogout}
+                sx={{ color: 'error.main', py: 1.5 }}
+              >
                 <ListItemIcon>
                   <ExitToApp fontSize="small" sx={{ color: 'error.main' }} />
                 </ListItemIcon>
@@ -250,7 +261,7 @@ export const AdminNavbar: React.FC<AdminNavbarProps> = ({ title = 'CleanTrack' }
         </Toolbar>
       </Container>
 
-      {/* ✅ Notification Settings Dialog */}
+      {/* Notification Settings Dialog */}
       <Dialog
         open={notifSettingsOpen}
         onClose={handleCloseNotifSettings}
@@ -259,7 +270,7 @@ export const AdminNavbar: React.FC<AdminNavbarProps> = ({ title = 'CleanTrack' }
       >
         <DialogTitle>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            <Notifications color="primary" />
+            <Settings color="primary" />
             <Typography variant="h6">Notification Settings</Typography>
           </Box>
         </DialogTitle>
@@ -306,7 +317,7 @@ export const AdminNavbar: React.FC<AdminNavbarProps> = ({ title = 'CleanTrack' }
         </DialogActions>
       </Dialog>
 
-      {/* ✅ Snackbar */}
+      {/* Snackbar */}
       <Snackbar
         open={snackbarOpen}
         autoHideDuration={3000}

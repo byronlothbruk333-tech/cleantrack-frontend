@@ -35,6 +35,7 @@ export interface FleetTruck {
   status: string;
   completion: number;
   capacity: number;
+  workingDays?: string[];
   lastUpdate: string;
 }
 
@@ -44,6 +45,7 @@ export interface RoutePerformance {
   driver: string;
   truckId: string;
   duration: string;
+  durationType?: 'scheduled' | 'actual';
   stops: number;
   completed: number;
   efficiency: number;
@@ -60,31 +62,59 @@ export interface RoutePerformanceResponse {
   };
 }
 
+export interface DashboardData {
+  kpis: KPIs;
+  fleet: FleetTruck[];
+  routes: RoutePerformance[];
+  stats: {
+    totalRoutes: number;
+    completedRoutes: number;
+    avgEfficiency: number;
+    avgDuration: number;
+  };
+  fetchedAt: string;
+}
+
+// ============================================
+// NO-CACHE HEADERS
+// ============================================
+const noCacheHeaders = {
+  'Cache-Control': 'no-cache, no-store, must-revalidate',
+  Pragma: 'no-cache',
+  Expires: '0',
+};
+
 // ============================================
 // KPI SERVICE
 // ============================================
 export const kpiService = {
-  // ----------------------------------------
-  // GET KPIs
-  // ----------------------------------------
+  // ✅ NEW: Single call that returns everything for the dashboard
+  getDashboardData: async (): Promise<DashboardData> => {
+    const response = await api.get('/kpis/dashboard', {
+      headers: noCacheHeaders,
+    });
+    return response.data;
+  },
+
+  // Legacy methods — kept for other pages that may still use them
   getKPIs: async (): Promise<{ kpis: KPIs }> => {
-    const response = await api.get('/kpis');
+    const response = await api.get('/kpis', {
+      headers: noCacheHeaders,
+    });
     return response.data;
   },
 
-  // ----------------------------------------
-  // GET FLEET STATUS
-  // ----------------------------------------
   getFleetStatus: async (): Promise<{ fleet: FleetTruck[] }> => {
-    const response = await api.get('/kpis/fleet');
+    const response = await api.get('/kpis/fleet', {
+      headers: noCacheHeaders,
+    });
     return response.data;
   },
 
-  // ----------------------------------------
-  // GET ROUTE PERFORMANCE
-  // ----------------------------------------
   getRoutePerformance: async (): Promise<RoutePerformanceResponse> => {
-    const response = await api.get('/kpis/routes');
+    const response = await api.get('/kpis/routes', {
+      headers: noCacheHeaders,
+    });
     return response.data;
   },
 };

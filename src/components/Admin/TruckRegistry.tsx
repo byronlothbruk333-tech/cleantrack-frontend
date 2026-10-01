@@ -65,7 +65,6 @@ const ZONES = [
   'Zone 7',
   'Zone 8',
   'Zone 9',
-  'Zone 10',
 ];
 
 const INITIAL_FORM: TruckFormData = {

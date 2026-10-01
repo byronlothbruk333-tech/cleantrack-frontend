@@ -50,6 +50,17 @@ export interface TruckStats {
 }
 
 // ============================================
+// DRIVER TYPE
+// ============================================
+export interface Driver {
+  id: string;
+  name: string;
+  email: string;
+  phone?: string | null;
+  zone?: string | null;
+}
+
+// ============================================
 // TRUCK SERVICE
 // ============================================
 export const truckService = {
@@ -128,34 +139,10 @@ export const truckService = {
     return response.data;
   },
 };
-// ============================================
-// DRIVERS (helper — used for truck assignment)
-// ============================================
-export interface Driver {
-  id: string;
-  name: string;
-  email: string;
-  phone?: string | null;
-  zone?: string | null;
-}
 
-export const userService = {
-  getDrivers: async (): Promise<{ count: number; drivers: Driver[] }> => {
-    const response = await api.get('/users/drivers');
-    return response.data;
-  },
-};
 // ============================================
-// DRIVER TYPE + USER SERVICE
+// USER SERVICE (for drivers dropdown)
 // ============================================
-export interface Driver {
-  id: string;
-  name: string;
-  email: string;
-  phone?: string | null;
-  zone?: string | null;
-}
-
 export const userService = {
   getDrivers: async (): Promise<{ count: number; drivers: Driver[] }> => {
     const response = await api.get('/users/drivers');

@@ -31,6 +31,10 @@ import {
   Breadcrumbs,
   Link,
   Paper,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem,
 } from '@mui/material';
 import {
   ArrowBack,
@@ -52,6 +56,17 @@ import {
   type Complaint,
   type Comment,
 } from '../../Services/complaintService';
+import api from '../../Services/api';
+
+// ============================================
+// TYPES
+// ============================================
+interface Truck {
+  id: string;
+  truckId: string;
+  zone: string;
+  driverName?: string;
+}
 
 // ============================================
 // COMPONENT
@@ -73,6 +88,12 @@ export const ComplaintDetail: React.FC = () => {
   // Dialog
   const [openRejectDialog, setOpenRejectDialog] = useState(false);
 
+  // Assign Truck states
+  const [showAssignDialog, setShowAssignDialog] = useState(false);
+  const [trucks, setTrucks] = useState<Truck[]>([]);
+  const [selectedTruckId, setSelectedTruckId] = useState<string>('');
+  const [assigning, setAssigning] = useState(false);
+
   // New comment
   const [newComment, setNewComment] = useState('');
   const [isInternal, setIsInternal] = useState(false);
@@ -83,6 +104,11 @@ export const ComplaintDetail: React.FC = () => {
   const [snackbarSeverity, setSnackbarSeverity] = useState<
     'success' | 'error' | 'info' | 'warning'
   >('info');
+
+  // ✅ Helper to navigate back to the Complaints tab
+  const goBackToComplaintsTab = () => {
+    navigate('/admin', { state: { tab: 2 } });
+  };
 
   // ============================================
   // LOAD DATA
@@ -140,12 +166,31 @@ export const ComplaintDetail: React.FC = () => {
   }, [id]);
 
   // ============================================
+  // LOAD TRUCKS FOR ASSIGNMENT
+  // ============================================
+  useEffect(() => {
+    const fetchTrucks = async () => {
+      if (!showAssignDialog) return;
+      try {
+        const response = await api.get('/trucks');
+        const allTrucks: Truck[] = response.data.trucks || [];
+
+        const matchingTrucks = complaint?.zone
+          ? allTrucks.filter((t) => t.zone === complaint.zone)
+          : [];
+
+        setTrucks(matchingTrucks.length > 0 ? matchingTrucks : allTrucks);
+      } catch (err) {
+        console.error('Failed to load trucks:', err);
+      }
+    };
+    fetchTrucks();
+  }, [showAssignDialog, complaint?.zone]);
+
+  // ============================================
   // HELPERS
   // ============================================
-  const showSnackbar = (
-    message: string,
-    severity: typeof snackbarSeverity
-  ) => {
+  const showSnackbar = (message: string, severity: typeof snackbarSeverity) => {
     setSnackbarMessage(message);
     setSnackbarSeverity(severity);
     setSnackbarOpen(true);
@@ -284,6 +329,37 @@ export const ComplaintDetail: React.FC = () => {
   };
 
   // ============================================
+  // ASSIGN TRUCK
+  // ============================================
+  const handleAssignTruck = async () => {
+    if (!selectedTruckId || !complaint) return;
+
+    setAssigning(true);
+    try {
+      await api.post(`/reports/${complaint.id}/assign-truck`, {
+        truckId: selectedTruckId,
+      });
+
+      showSnackbar('✅ Truck assigned successfully!', 'success');
+      setShowAssignDialog(false);
+      setSelectedTruckId('');
+
+      const refreshed = await complaintService.getComplaintById(complaint.id);
+      setComplaint(refreshed.report);
+    } catch (err: unknown) {
+      const error = err as {
+        response?: { data?: { message?: string } };
+      };
+      showSnackbar(
+        error.response?.data?.message || 'Failed to assign truck',
+        'error'
+      );
+    } finally {
+      setAssigning(false);
+    }
+  };
+
+  // ============================================
   // COMMENT ACTIONS
   // ============================================
   const handleAddComment = async () => {
@@ -355,16 +431,14 @@ export const ComplaintDetail: React.FC = () => {
       <Container maxWidth="lg" sx={{ py: 4 }}>
         <Button
           startIcon={<ArrowBack />}
-          onClick={() => navigate('/admin')}
+          onClick={goBackToComplaintsTab}
           sx={{ mb: 3 }}
         >
           Back to Dashboard
         </Button>
         <Alert severity="error">
           <Typography variant="h6">Complaint not found</Typography>
-          <Typography variant="body2">
-            No complaint exists with ID: {id}
-          </Typography>
+          <Typography variant="body2">No complaint exists with ID: {id}</Typography>
         </Alert>
       </Container>
     );
@@ -375,7 +449,7 @@ export const ComplaintDetail: React.FC = () => {
       <Container maxWidth="lg" sx={{ py: 4 }}>
         <Button
           startIcon={<ArrowBack />}
-          onClick={() => navigate('/admin')}
+          onClick={goBackToComplaintsTab}
           sx={{ mb: 3 }}
         >
           Back to Dashboard
@@ -390,13 +464,12 @@ export const ComplaintDetail: React.FC = () => {
   // ============================================
   return (
     <Container maxWidth="lg" sx={{ py: 4 }}>
-      {/* Breadcrumbs */}
       <Breadcrumbs aria-label="breadcrumb" sx={{ mb: 2 }}>
         <Link
           underline="hover"
           sx={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }}
           color="inherit"
-          onClick={() => navigate('/admin')}
+          onClick={goBackToComplaintsTab}
         >
           <HomeIcon sx={{ mr: 0.5 }} fontSize="inherit" />
           Dashboard
@@ -406,10 +479,9 @@ export const ComplaintDetail: React.FC = () => {
         </Typography>
       </Breadcrumbs>
 
-      {/* Back Button */}
       <Button
         startIcon={<ArrowBack />}
-        onClick={() => navigate('/admin')}
+        onClick={goBackToComplaintsTab}
         sx={{ mb: 3 }}
       >
         Back to Dashboard
@@ -439,8 +511,8 @@ export const ComplaintDetail: React.FC = () => {
         </Box>
       </Box>
 
-      {/* Status / Priority Chips */}
-      <Box sx={{ display: 'flex', gap: 1, mb: 3 }}>
+      {/* Status / Priority / Zone Chips */}
+      <Box sx={{ display: 'flex', gap: 1, mb: 3, flexWrap: 'wrap' }}>
         <Chip
           label={complaint.status.toUpperCase().replace('-', ' ')}
           color={getStatusColor(complaint.status)}
@@ -450,13 +522,19 @@ export const ComplaintDetail: React.FC = () => {
           color={getPriorityColor(complaint.priority)}
           variant="outlined"
         />
+        {complaint.zone && (
+          <Chip
+            label={`📍 ${complaint.zone}`}
+            color="primary"
+            variant="outlined"
+          />
+        )}
       </Box>
 
       {/* Main Grid */}
       <Grid container spacing={3}>
         {/* Left Column */}
         <Grid size={{ xs: 12, md: 7 }}>
-          {/* Details */}
           <Card>
             <CardContent>
               <Typography variant="h6" gutterBottom>
@@ -481,6 +559,11 @@ export const ComplaintDetail: React.FC = () => {
                     Address
                   </Typography>
                   <Typography variant="body1">{complaint.address}</Typography>
+                  {complaint.zone && (
+                    <Typography variant="caption" color="primary">
+                      Zone: {complaint.zone}
+                    </Typography>
+                  )}
                 </Box>
               </Box>
 
@@ -518,7 +601,6 @@ export const ComplaintDetail: React.FC = () => {
                 </Box>
               </Box>
 
-              {/* Photos */}
               {complaint.photos && complaint.photos.length > 0 && (
                 <>
                   <Divider sx={{ my: 3 }} />
@@ -598,11 +680,7 @@ export const ComplaintDetail: React.FC = () => {
                               variant="outlined"
                             />
                             {comment.isInternal && (
-                              <Chip
-                                label="INTERNAL"
-                                size="small"
-                                color="warning"
-                              />
+                              <Chip label="INTERNAL" size="small" color="warning" />
                             )}
                           </Box>
                         }
@@ -626,7 +704,6 @@ export const ComplaintDetail: React.FC = () => {
                 </List>
               )}
 
-              {/* Add Comment */}
               <Divider sx={{ my: 2 }} />
               <TextField
                 fullWidth
@@ -679,6 +756,20 @@ export const ComplaintDetail: React.FC = () => {
               <Divider sx={{ my: 2 }} />
 
               <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                {/* ASSIGN TRUCK BUTTON */}
+                {complaint.status !== 'resolved' && complaint.status !== 'rejected' && (
+                  <Button
+                    variant="contained"
+                    color="primary"
+                    fullWidth
+                    onClick={() => setShowAssignDialog(true)}
+                    disabled={actionLoading}
+                    size="large"
+                  >
+                    🚛 Assign Truck to This Complaint
+                  </Button>
+                )}
+
                 {complaint.status === 'pending' && (
                   <>
                     <Button
@@ -739,7 +830,7 @@ export const ComplaintDetail: React.FC = () => {
 
                 <Button
                   variant="outlined"
-                  onClick={() => navigate('/admin')}
+                  onClick={goBackToComplaintsTab}
                   fullWidth
                 >
                   Return to Dashboard
@@ -748,14 +839,13 @@ export const ComplaintDetail: React.FC = () => {
             </CardContent>
           </Card>
 
-          {/* Quick Info */}
           <Paper sx={{ mt: 2, p: 2 }}>
             <Typography variant="caption" color="text.secondary">
               💡 Tip
             </Typography>
             <Typography variant="body2" sx={{ mt: 0.5 }}>
               {complaint.status === 'pending'
-                ? 'Review the complaint and mark it as In Progress to assign a driver.'
+                ? 'Assign a truck based on the complaint zone, or mark it In Progress.'
                 : complaint.status === 'in-progress'
                 ? 'Once the collection is done, mark this complaint as Resolved.'
                 : 'This complaint is closed.'}
@@ -763,6 +853,58 @@ export const ComplaintDetail: React.FC = () => {
           </Paper>
         </Grid>
       </Grid>
+
+      {/* Assign Truck Dialog */}
+      <Dialog
+        open={showAssignDialog}
+        onClose={() => setShowAssignDialog(false)}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>Assign Truck to Complaint</DialogTitle>
+        <DialogContent>
+          <Alert severity="info" sx={{ mb: 2 }}>
+            <strong>Complaint Zone:</strong> {complaint.zone || 'Not specified'}
+          </Alert>
+
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+            Only trucks in this zone are shown below. The complaint will be added
+            as a new stop on the selected truck's active route.
+          </Typography>
+
+          <FormControl fullWidth sx={{ mt: 2 }}>
+            <InputLabel>Select Truck</InputLabel>
+            <Select
+              value={selectedTruckId}
+              onChange={(e) => setSelectedTruckId(e.target.value)}
+              label="Select Truck"
+            >
+              {trucks.length === 0 ? (
+                <MenuItem value="" disabled>
+                  No trucks available
+                </MenuItem>
+              ) : (
+                trucks.map((truck) => (
+                  <MenuItem key={truck.id} value={truck.id}>
+                    {truck.truckId} - {truck.zone} ({truck.driverName || 'Unassigned'})
+                  </MenuItem>
+                ))
+              )}
+            </Select>
+          </FormControl>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setShowAssignDialog(false)}>Cancel</Button>
+          <Button
+            variant="contained"
+            onClick={handleAssignTruck}
+            disabled={!selectedTruckId || assigning}
+            startIcon={assigning ? <CircularProgress size={20} /> : null}
+          >
+            {assigning ? 'Assigning...' : 'Assign Truck'}
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       {/* Reject Confirmation Dialog */}
       <Dialog open={openRejectDialog} onClose={() => setOpenRejectDialog(false)}>

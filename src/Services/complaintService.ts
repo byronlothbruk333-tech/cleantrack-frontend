@@ -3,19 +3,28 @@ import api from './api';
 // ============================================
 // TYPES
 // ============================================
+export type IssueType =
+  | 'missed-collection'
+  | 'illegal-dumping'
+  | 'overflowing-bin'
+  | 'other';
+
 export type ReportStatus = 'pending' | 'in-progress' | 'resolved' | 'rejected';
+
+export type Priority = 'low' | 'medium' | 'high' | 'critical';
 
 export interface Complaint {
   id: string;
   citizenId: string;
-  issueType: string;
+  issueType: IssueType;
   description: string;
   address: string;
+  zone?: string | null; // ADDED
   latitude?: number | null;
   longitude?: number | null;
   photos: string[];
   status: ReportStatus;
-  priority: string;
+  priority: Priority;
   assignedTo?: string | null;
   resolvedAt?: string | null;
   contactName?: string | null;

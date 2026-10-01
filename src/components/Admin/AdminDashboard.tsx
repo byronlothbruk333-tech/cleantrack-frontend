@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Container,
   Grid,
@@ -27,6 +27,11 @@ import {
   ListItemAvatar,
   Avatar,
   Divider,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  TextField,
 } from '@mui/material';
 import {
   TrendingUp,
@@ -39,8 +44,9 @@ import {
   Cancel as CancelIcon,
   Pending as PendingIcon,
   Timer,
+  Warning as WarningIcon,
 } from '@mui/icons-material';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import {
   kpiService,
   type KPIs,
@@ -48,12 +54,28 @@ import {
   type RoutePerformance,
 } from '../../Services/kpiService';
 import { reportService, type Report } from '../../Services/reportService';
+import api from '../../Services/api';
+import { exportDashboardToExcel } from '../../utils/excelExport';
+
+// ============================================
+// RESET RESPONSE TYPE
+// ============================================
+interface ResetWeekResponse {
+  message: string;
+  resetAt: string;
+  reset: {
+    stops: number;
+    routes: number;
+    trucks: number;
+  };
+}
 
 // ============================================
 // COMPONENT
 // ============================================
 export const AdminDashboard: React.FC = () => {
   const navigate = useNavigate();
+  const location = useLocation();
 
   const [kpis, setKpis] = useState<KPIs | null>(null);
   const [trucks, setTrucks] = useState<FleetTruck[]>([]);
@@ -69,87 +91,66 @@ export const AdminDashboard: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [exportLoading, setExportLoading] = useState(false);
-  const [tabValue, setTabValue] = useState(0);
+
+  const [showResetDialog, setShowResetDialog] = useState(false);
+  const [resetConfirmText, setResetConfirmText] = useState('');
+  const [resetLoading, setResetLoading] = useState(false);
+
+  const [tabValue, setTabValue] = useState<number>(
+    (location.state as { tab?: number })?.tab ?? 0
+  );
+
+  const hasInitialized = useRef(false);
+  const isFetching = useRef(false);
 
   // ============================================
   // FETCH DASHBOARD DATA
   // ============================================
-  const fetchData = async () => {
-    setLoading(true);
-    setError('');
+  const fetchDashboardData = async (isInitial = false) => {
+    if (isFetching.current) return;
+    isFetching.current = true;
+    if (isInitial) setLoading(true);
 
     try {
-      const [kpisData, fleetData, routeData, complaintsData] = await Promise.all([
-        kpiService.getKPIs(),
-        kpiService.getFleetStatus(),
-        kpiService.getRoutePerformance(),
+      const [dashboardData, complaintsData] = await Promise.all([
+        kpiService.getDashboardData(),
         reportService.getAllReports({ limit: 10 }),
       ]);
 
-      setKpis(kpisData.kpis);
-      setTrucks(fleetData.fleet);
-      setRouteData(routeData.routes);
-      setRouteStats(routeData.stats);
+      setKpis(dashboardData.kpis);
+      setTrucks(dashboardData.fleet);
+      setRouteData(dashboardData.routes);
+      setRouteStats(dashboardData.stats);
       setComplaints(complaintsData.reports);
+      setError('');
     } catch (err: unknown) {
       const error = err as {
         response?: { data?: { message?: string; error?: string } };
       };
-      setError(
-        error.response?.data?.message ||
-          error.response?.data?.error ||
-          'Failed to load dashboard data. Please try again.'
-      );
+      if (isInitial) {
+        setError(
+          error.response?.data?.message ||
+            error.response?.data?.error ||
+            'Failed to load dashboard data. Please try again.'
+        );
+      }
     } finally {
-      setLoading(false);
+      if (isInitial) setLoading(false);
+      isFetching.current = false;
     }
   };
 
+  // ============================================
+  // INITIAL LOAD + AUTO-REFRESH
+  // ============================================
   useEffect(() => {
-    let isMounted = true;
+    if (!hasInitialized.current) {
+      hasInitialized.current = true;
+      fetchDashboardData(true);
+    }
 
-    const loadData = async () => {
-      try {
-        setLoading(true);
-        setError('');
-
-        const [kpisData, fleetData, routeData, complaintsData] = await Promise.all([
-          kpiService.getKPIs(),
-          kpiService.getFleetStatus(),
-          kpiService.getRoutePerformance(),
-          reportService.getAllReports({ limit: 10 }),
-        ]);
-
-        if (isMounted) {
-          setKpis(kpisData.kpis);
-          setTrucks(fleetData.fleet);
-          setRouteData(routeData.routes);
-          setRouteStats(routeData.stats);
-          setComplaints(complaintsData.reports);
-        }
-      } catch (err: unknown) {
-        const error = err as {
-          response?: { data?: { message?: string; error?: string } };
-        };
-        if (isMounted) {
-          setError(
-            error.response?.data?.message ||
-              error.response?.data?.error ||
-              'Failed to load dashboard data. Please try again.'
-          );
-        }
-      } finally {
-        if (isMounted) {
-          setLoading(false);
-        }
-      }
-    };
-
-    loadData();
-
-    return () => {
-      isMounted = false;
-    };
+    const intervalId = setInterval(() => fetchDashboardData(false), 60000);
+    return () => clearInterval(intervalId);
   }, []);
 
   // ============================================
@@ -201,28 +202,62 @@ export const AdminDashboard: React.FC = () => {
     setTabValue(newValue);
   };
 
+  // ============================================
+  // EXCEL EXPORT
+  // ============================================
   const handleExportReport = () => {
     setExportLoading(true);
     setTimeout(() => {
-      const data = {
-        kpis,
-        trucks,
-        complaints,
-        routePerformance: routeData,
-        exportedAt: new Date().toISOString(),
-      };
+      try {
+        exportDashboardToExcel({
+          kpis,
+          trucks,
+          routeData,
+          routeStats,
+          complaints,
+        });
+      } catch (err) {
+        console.error('Excel export failed:', err);
+        alert('Failed to export dashboard data. Please try again.');
+      } finally {
+        setExportLoading(false);
+      }
+    }, 200);
+  };
 
-      const blob = new Blob([JSON.stringify(data, null, 2)], {
-        type: 'application/json',
-      });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `cleantrack-dashboard-${Date.now()}.json`;
-      link.click();
-      URL.revokeObjectURL(url);
-      setExportLoading(false);
-    }, 500);
+  // ============================================
+  // RESET WEEK
+  // ============================================
+  const handleResetWeek = async () => {
+    if (resetConfirmText !== 'RESET') return;
+
+    setResetLoading(true);
+    try {
+      const response = await api.post<ResetWeekResponse>('/kpis/reset-week');
+      const data = response.data;
+
+      alert(
+        `✅ Week reset successfully!\n\n` +
+          `Reset: ${data.reset.routes} routes, ` +
+          `${data.reset.stops} stops, ` +
+          `${data.reset.trucks} trucks`
+      );
+
+      setShowResetDialog(false);
+      setResetConfirmText('');
+      await fetchDashboardData(true);
+    } catch (err: unknown) {
+      const error = err as {
+        response?: { data?: { message?: string; error?: string } };
+      };
+      alert(
+        `❌ Failed to reset week:\n\n${
+          error.response?.data?.message || 'Network error'
+        }`
+      );
+    } finally {
+      setResetLoading(false);
+    }
   };
 
   // ============================================
@@ -259,7 +294,7 @@ export const AdminDashboard: React.FC = () => {
         },
         {
           id: 'totalCollections',
-          title: 'Total Collections',
+          title: 'Total Complaints',
           value: kpis.totalCollections,
           suffix: '',
           icon: DirectionsCar,
@@ -275,8 +310,20 @@ export const AdminDashboard: React.FC = () => {
   if (loading) {
     return (
       <Container maxWidth="xl" sx={{ py: 4 }}>
-        <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}>
-          <CircularProgress />
+        <Box
+          sx={{
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            py: 8,
+            gap: 2,
+          }}
+        >
+          <CircularProgress size={60} />
+          <Typography variant="body1" color="text.secondary">
+            Loading dashboard data...
+          </Typography>
         </Box>
       </Container>
     );
@@ -291,7 +338,7 @@ export const AdminDashboard: React.FC = () => {
         <Alert severity="error" sx={{ mb: 3 }}>
           {error}
         </Alert>
-        <Button variant="contained" onClick={fetchData}>
+        <Button variant="contained" onClick={() => fetchDashboardData(true)}>
           Retry
         </Button>
       </Container>
@@ -310,6 +357,8 @@ export const AdminDashboard: React.FC = () => {
           justifyContent: 'space-between',
           alignItems: 'center',
           mb: 3,
+          flexWrap: 'wrap',
+          gap: 2,
         }}
       >
         <Typography variant="h4">Dashboard Overview</Typography>
@@ -322,9 +371,22 @@ export const AdminDashboard: React.FC = () => {
             onClick={handleExportReport}
             disabled={exportLoading}
           >
-            {exportLoading ? 'Exporting...' : 'Export Report'}
+            {exportLoading ? 'Exporting...' : 'Export Week'}
           </Button>
-          <IconButton onClick={fetchData} disabled={loading}>
+
+          <Button
+            variant="outlined"
+            color="error"
+            startIcon={<Refresh />}
+            onClick={() => setShowResetDialog(true)}
+          >
+            Reset Week
+          </Button>
+
+          <IconButton
+            onClick={() => fetchDashboardData(true)}
+            disabled={loading}
+          >
             {loading ? <CircularProgress size={24} /> : <Refresh />}
           </IconButton>
         </Box>
@@ -334,7 +396,6 @@ export const AdminDashboard: React.FC = () => {
       <Grid container spacing={3} sx={{ mb: 3 }}>
         {kpiConfigs.map((config) => {
           const Icon = config.icon;
-
           return (
             <Grid size={{ xs: 12, sm: 6, md: 3 }} key={config.id}>
               <Card>
@@ -406,6 +467,7 @@ export const AdminDashboard: React.FC = () => {
                     <TableCell>Truck ID</TableCell>
                     <TableCell>Driver</TableCell>
                     <TableCell>Zone</TableCell>
+                    <TableCell>Collection Days</TableCell>
                     <TableCell>Status</TableCell>
                     <TableCell>Completion</TableCell>
                     <TableCell>Action</TableCell>
@@ -417,6 +479,19 @@ export const AdminDashboard: React.FC = () => {
                       <TableCell>{truck.truckId}</TableCell>
                       <TableCell>{truck.driverName}</TableCell>
                       <TableCell>{truck.zone}</TableCell>
+                      <TableCell>
+                        <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
+                          {(truck.workingDays || []).map((day) => (
+                            <Chip
+                              key={day}
+                              label={day.slice(0, 3).toUpperCase()}
+                              size="small"
+                              variant="outlined"
+                              sx={{ fontSize: '0.65rem', height: 20 }}
+                            />
+                          ))}
+                        </Box>
+                      </TableCell>
                       <TableCell>
                         <Chip
                           label={truck.status.toUpperCase().replace('-', ' ')}
@@ -549,7 +624,30 @@ export const AdminDashboard: React.FC = () => {
                         <TableRow key={route.id}>
                           <TableCell>{route.route}</TableCell>
                           <TableCell>{route.driver}</TableCell>
-                          <TableCell>{route.duration}</TableCell>
+                          <TableCell>
+                            <Box
+                              sx={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: 0.5,
+                              }}
+                            >
+                              <span>{route.duration}</span>
+                              {route.durationType === 'actual' && (
+                                <Chip
+                                  label="ACTUAL"
+                                  size="small"
+                                  color="success"
+                                  variant="outlined"
+                                  sx={{
+                                    height: 18,
+                                    fontSize: '0.6rem',
+                                    '& .MuiChip-label': { px: 0.5 },
+                                  }}
+                                />
+                              )}
+                            </Box>
+                          </TableCell>
                           <TableCell>{route.stops}</TableCell>
                           <TableCell>{route.completed}</TableCell>
                           <TableCell>
@@ -758,6 +856,105 @@ export const AdminDashboard: React.FC = () => {
           </Grid>
         </Grid>
       )}
+
+      {/* ============================================
+          RESET WEEK CONFIRMATION DIALOG
+      ============================================ */}
+      <Dialog
+        open={showResetDialog}
+        onClose={() => {
+          setShowResetDialog(false);
+          setResetConfirmText('');
+        }}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle sx={{ bgcolor: 'error.main', color: 'white' }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <WarningIcon />
+            Reset Week Data
+          </Box>
+        </DialogTitle>
+
+        <DialogContent sx={{ pt: 3 }}>
+          <Alert severity="warning" sx={{ mb: 3 }}>
+            <strong>This will reset the current week's progress.</strong>
+            <br />
+            Routes and schedules are permanent and will not be deleted.
+          </Alert>
+
+          <Typography variant="body1" gutterBottom>
+            Resetting will:
+          </Typography>
+
+          <Box component="ul" sx={{ pl: 3, mt: 1 }}>
+            <li>
+              Reset all <strong>stop statuses</strong> back to <em>pending</em>
+            </li>
+            <li>
+              Clear all <strong>completion timestamps</strong> and photos
+            </li>
+            <li>
+              Reset <strong>route progress</strong> back to 0%
+            </li>
+            <li>
+              Reset <strong>truck completion</strong> to 0%
+            </li>
+            <li>
+              Set <strong>truck statuses</strong> to <em>available</em>{' '}
+              (maintenance/offline preserved)
+            </li>
+          </Box>
+
+          <Alert severity="info" sx={{ mt: 3 }}>
+            <strong>Routes and complaints are kept.</strong> Only the progress
+            from this week is cleared, so the same routes can run fresh next
+            week.
+          </Alert>
+
+          <Alert severity="warning" sx={{ mt: 2 }}>
+            <strong>Before resetting:</strong> Make sure you have exported this
+            week's data using the <strong>Export Week</strong> button.
+          </Alert>
+
+          <Typography variant="body2" sx={{ mt: 3, mb: 1 }}>
+            Type <strong>RESET</strong> to confirm:
+          </Typography>
+
+          <TextField
+            fullWidth
+            value={resetConfirmText}
+            onChange={(e) => setResetConfirmText(e.target.value)}
+            placeholder="RESET"
+            autoFocus
+          />
+        </DialogContent>
+
+        <DialogActions sx={{ p: 2 }}>
+          <Button
+            onClick={() => {
+              setShowResetDialog(false);
+              setResetConfirmText('');
+            }}
+            disabled={resetLoading}
+          >
+            Cancel
+          </Button>
+          <Button
+            variant="contained"
+            color="error"
+            onClick={handleResetWeek}
+            disabled={resetConfirmText !== 'RESET' || resetLoading}
+            startIcon={
+              resetLoading ? (
+                <CircularProgress size={20} color="inherit" />
+              ) : null
+            }
+          >
+            {resetLoading ? 'Resetting...' : 'Reset Week'}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Container>
   );
 };
