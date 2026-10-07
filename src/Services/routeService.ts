@@ -7,6 +7,14 @@ export type StopStatus = 'pending' | 'completed' | 'skipped';
 
 export type RouteStatus = 'pending' | 'in-progress' | 'completed' | 'delayed';
 
+export interface ReportCommentSummary {
+  id: string;
+  content: string;
+  createdAt: string;
+  authorName: string;
+  authorRole: string;
+}
+
 export interface RouteStop {
   id: string;
   routeId: string;
@@ -24,6 +32,13 @@ export interface RouteStop {
   reportId?: string | null;
   beforePhoto?: string | null;
   afterPhoto?: string | null;
+  // ✅ Comments from admin (feature #2/#3)
+  reportComments?: ReportCommentSummary[];
+  // ✅ Photos from the original citizen's report (feature #3)
+  reportPhotos?: string[];
+  // ✅ Admin's written response to the reporter (feature #4)
+  reportAdminResponse?: string | null;
+  reportAdminRespondedAt?: string | null;
 }
 
 export interface TruckInfo {
@@ -108,8 +123,7 @@ export const routeService = {
   },
 
   // ----------------------------------------
-  // GET ROUTE BY TRUCK ID (NEW)
-  // Used in RouteView.tsx to fetch a specific truck's route
+  // GET ROUTE BY TRUCK ID
   // ----------------------------------------
   getRouteByTruckId: async (truckId: string): Promise<{ route: Route }> => {
     const response = await api.get(`/routes/truck/${truckId}`);
@@ -117,8 +131,7 @@ export const routeService = {
   },
 
   // ----------------------------------------
-  // GET ROUTE BY DRIVER ID (NEW)
-  // Useful for admins looking up a specific driver's route
+  // GET ROUTE BY DRIVER ID
   // ----------------------------------------
   getRouteByDriverId: async (driverId: string): Promise<{ route: Route }> => {
     const response = await api.get(`/routes/driver/${driverId}`);

@@ -65,6 +65,8 @@ interface ComplaintData {
   };
   createdAt: string;
   resolvedAt?: string | null;
+  assignedTruck?: string | null;
+  assignedDriver?: string | null;
 }
 
 interface DashboardData {
@@ -109,7 +111,7 @@ const STYLES = {
   tableHeader: {
     font: { bold: true, sz: 11, color: { rgb: 'FFFFFF' } },
     fill: { fgColor: { rgb: '1976D2' } },
-    alignment: { horizontal: 'center', vertical: 'center' },
+    alignment: { horizontal: 'center', vertical: 'center', wrapText: true },
     border: {
       top: { style: 'thin', color: { rgb: '000000' } },
       bottom: { style: 'thin', color: { rgb: '000000' } },
@@ -119,7 +121,7 @@ const STYLES = {
   },
   tableCell: {
     font: { sz: 11 },
-    alignment: { horizontal: 'left', vertical: 'center' },
+    alignment: { horizontal: 'left', vertical: 'center', wrapText: true },
     border: {
       top: { style: 'thin', color: { rgb: 'DDDDDD' } },
       bottom: { style: 'thin', color: { rgb: 'DDDDDD' } },
@@ -302,13 +304,12 @@ export const exportDashboardToExcel = (data: DashboardData) => {
     styleCell(kpiSheet, `D${row}`, STYLES.metricLabel);
   });
 
-  // Complaint section rows (13-18 in Excel)
+  // Complaint section rows
   [13, 14, 15, 16, 17].forEach((row) => {
     ['A', 'B', 'C', 'D'].forEach((col) => {
       styleCell(kpiSheet, `${col}${row}`, STYLES.metricLabel);
     });
   });
-  // Resolution Rate row (18) — color-coded
   const resolutionRate =
     kpis?.totalReports && kpis.totalReports > 0
       ? Math.round(((kpis.resolvedReports ?? 0) / kpis.totalReports) * 100)
@@ -318,14 +319,14 @@ export const exportDashboardToExcel = (data: DashboardData) => {
   styleCell(kpiSheet, 'C18', STYLES.metricLabel);
   styleCell(kpiSheet, 'D18', STYLES.metricLabel);
 
-  // Fleet section rows (21-25)
+  // Fleet section rows
   [21, 22, 23, 24].forEach((row) => {
     ['A', 'B', 'C', 'D'].forEach((col) => {
       styleCell(kpiSheet, `${col}${row}`, STYLES.metricLabel);
     });
   });
 
-  // User section rows (27-28)
+  // User section rows
   [27, 28].forEach((row) => {
     ['A', 'B', 'C', 'D'].forEach((col) => {
       styleCell(kpiSheet, `${col}${row}`, STYLES.metricLabel);
@@ -449,14 +450,16 @@ export const exportDashboardToExcel = (data: DashboardData) => {
   XLSX.utils.book_append_sheet(workbook, routeSheet, 'Route Performance');
 
   // ============================================
-  // SHEET 4: Complaints
+  // SHEET 4: Complaints (ENHANCED)
+  // ✅ IMPROVEMENT 5a: Ref #, description, assigned truck + driver
   // ============================================
   const complaintSheetRows = [
     ['CleanTrack — Complaints Report'],
     [`Week: ${weekStart.toDateString()} → ${weekEnd.toDateString()}`],
+    [`Total Complaints: ${complaints.length}`],
     [],
     [
-      'Complaint ID',
+      'Ref #',
       'Issue Type',
       'Description',
       'Address',
@@ -467,9 +470,11 @@ export const exportDashboardToExcel = (data: DashboardData) => {
       'Citizen Email',
       'Date Reported',
       'Resolved At',
+      'Assigned Truck',
+      'Assigned Driver',
     ],
     ...complaints.map((c) => [
-      c.id.slice(0, 8),
+      c.id.slice(0, 8).toUpperCase(),
       c.issueType,
       c.description,
       c.address,
@@ -480,38 +485,49 @@ export const exportDashboardToExcel = (data: DashboardData) => {
       c.citizen?.email || 'N/A',
       new Date(c.createdAt).toLocaleString(),
       c.resolvedAt ? new Date(c.resolvedAt).toLocaleString() : 'N/A',
+      c.assignedTruck || 'Not Assigned',
+      c.assignedDriver || 'Not Assigned',
     ]),
   ];
 
   const complaintSheet = XLSX.utils.aoa_to_sheet(complaintSheetRows);
   complaintSheet['!cols'] = [
-    { wch: 15 },
+    { wch: 12 },
     { wch: 20 },
-    { wch: 40 },
+    { wch: 45 },
     { wch: 30 },
     { wch: 10 },
-    { wch: 15 },
+    { wch: 14 },
     { wch: 12 },
     { wch: 20 },
     { wch: 25 },
     { wch: 22 },
     { wch: 22 },
+    { wch: 15 },
+    { wch: 20 },
   ];
   complaintSheet['!merges'] = [
-    { s: { r: 0, c: 0 }, e: { r: 0, c: 10 } },
-    { s: { r: 1, c: 0 }, e: { r: 1, c: 10 } },
+    { s: { r: 0, c: 0 }, e: { r: 0, c: 12 } },
+    { s: { r: 1, c: 0 }, e: { r: 1, c: 12 } },
+    { s: { r: 2, c: 0 }, e: { r: 2, c: 12 } },
   ];
 
   styleCell(complaintSheet, 'A1', STYLES.title);
   styleCell(complaintSheet, 'A2', STYLES.subtitle);
-  ['A4', 'B4', 'C4', 'D4', 'E4', 'F4', 'G4', 'H4', 'I4', 'J4', 'K4'].forEach((c) =>
-    styleCell(complaintSheet, c, STYLES.tableHeader)
-  );
+  styleCell(complaintSheet, 'A3', STYLES.subtitle);
+
+  [
+    'A5', 'B5', 'C5', 'D5', 'E5', 'F5', 'G5',
+    'H5', 'I5', 'J5', 'K5', 'L5', 'M5',
+  ].forEach((c) => styleCell(complaintSheet, c, STYLES.tableHeader));
+
   for (let i = 0; i < complaints.length; i++) {
-    const rowNum = i + 5;
-    ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K'].forEach((col) => {
-      styleCell(complaintSheet, `${col}${rowNum}`, STYLES.tableCell);
-    });
+    const rowNum = i + 6;
+    ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M'].forEach(
+      (col) => {
+        styleCell(complaintSheet, `${col}${rowNum}`, STYLES.tableCell);
+      }
+    );
   }
 
   XLSX.utils.book_append_sheet(workbook, complaintSheet, 'Complaints');

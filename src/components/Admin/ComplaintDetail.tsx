@@ -49,6 +49,8 @@ import {
   Home as HomeIcon,
   Delete as DeleteIcon,
   Send as SendIcon,
+  Close as CloseIcon,
+  VerifiedUser,
 } from '@mui/icons-material';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
@@ -65,6 +67,7 @@ interface Truck {
   id: string;
   truckId: string;
   zone: string;
+  truckType?: 'collection' | 'response-unit';
   driverName?: string;
 }
 
@@ -94,6 +97,14 @@ export const ComplaintDetail: React.FC = () => {
   const [selectedTruckId, setSelectedTruckId] = useState<string>('');
   const [assigning, setAssigning] = useState(false);
 
+  // Photo preview state
+  const [previewPhoto, setPreviewPhoto] = useState<string | null>(null);
+
+  // Send Response state
+  const [showRespondDialog, setShowRespondDialog] = useState(false);
+  const [respondText, setRespondText] = useState('');
+  const [responding, setResponding] = useState(false);
+
   // New comment
   const [newComment, setNewComment] = useState('');
   const [isInternal, setIsInternal] = useState(false);
@@ -105,7 +116,6 @@ export const ComplaintDetail: React.FC = () => {
     'success' | 'error' | 'info' | 'warning'
   >('info');
 
-  // ✅ Helper to navigate back to the Complaints tab
   const goBackToComplaintsTab = () => {
     navigate('/admin', { state: { tab: 2 } });
   };
@@ -175,11 +185,31 @@ export const ComplaintDetail: React.FC = () => {
         const response = await api.get('/trucks');
         const allTrucks: Truck[] = response.data.trucks || [];
 
+        // Prefer response units first, then filter by zone
+        const responseUnits = allTrucks.filter(
+          (t) => t.truckType === 'response-unit'
+        );
         const matchingTrucks = complaint?.zone
-          ? allTrucks.filter((t) => t.zone === complaint.zone)
+          ? allTrucks.filter(
+              (t) =>
+                t.zone === complaint.zone && t.truckType !== 'response-unit'
+            )
           : [];
 
-        setTrucks(matchingTrucks.length > 0 ? matchingTrucks : allTrucks);
+        const combined = [
+          ...responseUnits,
+          ...matchingTrucks,
+          ...allTrucks.filter(
+            (t) =>
+              !responseUnits.includes(t) && !matchingTrucks.includes(t)
+          ),
+        ];
+
+        const unique = Array.from(
+          new Map(combined.map((t) => [t.id, t])).values()
+        );
+
+        setTrucks(unique);
       } catch (err) {
         console.error('Failed to load trucks:', err);
       }
@@ -340,7 +370,7 @@ export const ComplaintDetail: React.FC = () => {
         truckId: selectedTruckId,
       });
 
-      showSnackbar('✅ Truck assigned successfully!', 'success');
+      showSnackbar('✅ Response Unit assigned successfully!', 'success');
       setShowAssignDialog(false);
       setSelectedTruckId('');
 
@@ -351,11 +381,43 @@ export const ComplaintDetail: React.FC = () => {
         response?: { data?: { message?: string } };
       };
       showSnackbar(
-        error.response?.data?.message || 'Failed to assign truck',
+        error.response?.data?.message || 'Failed to assign response unit',
         'error'
       );
     } finally {
       setAssigning(false);
+    }
+  };
+
+  // ============================================
+  // SEND RESPONSE TO REPORTER
+  // ============================================
+  const handleSendResponse = async () => {
+    if (!complaint || !respondText.trim()) return;
+
+    setResponding(true);
+    try {
+      await complaintService.respondToReport(complaint.id, respondText.trim());
+
+      const refreshed = await complaintService.getComplaintById(complaint.id);
+      setComplaint(refreshed.report);
+
+      const commentsData = await complaintService.getComments(complaint.id);
+      setComments(commentsData.comments);
+
+      setShowRespondDialog(false);
+      setRespondText('');
+      showSnackbar('✅ Response sent successfully!', 'success');
+    } catch (err: unknown) {
+      const error = err as {
+        response?: { data?: { message?: string; error?: string } };
+      };
+      showSnackbar(
+        error.response?.data?.message || 'Failed to send response',
+        'error'
+      );
+    } finally {
+      setResponding(false);
     }
   };
 
@@ -531,6 +593,35 @@ export const ComplaintDetail: React.FC = () => {
         )}
       </Box>
 
+      {/* Existing Response Alert */}
+      {complaint.adminResponse && (
+        <Alert
+          severity="info"
+          sx={{
+            mb: 3,
+            border: '2px solid',
+            borderColor: 'info.main',
+          }}
+        >
+          <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
+            📨 Previous Response Sent:
+          </Typography>
+          <Typography variant="body2" sx={{ mt: 0.5 }}>
+            {complaint.adminResponse}
+          </Typography>
+          <Typography
+            variant="caption"
+            color="text.secondary"
+            sx={{ display: 'block', mt: 1 }}
+          >
+            Sent:{' '}
+            {complaint.adminRespondedAt
+              ? formatDateTime(complaint.adminRespondedAt)
+              : 'Unknown'}
+          </Typography>
+        </Alert>
+      )}
+
       {/* Main Grid */}
       <Grid container spacing={3}>
         {/* Left Column */}
@@ -542,17 +633,23 @@ export const ComplaintDetail: React.FC = () => {
               </Typography>
               <Divider sx={{ my: 2 }} />
 
-              <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 2, mb: 3 }}>
+              <Box
+                sx={{ display: 'flex', alignItems: 'flex-start', gap: 2, mb: 3 }}
+              >
                 <Description color="action" />
                 <Box>
                   <Typography variant="caption" color="text.secondary">
                     Description
                   </Typography>
-                  <Typography variant="body1">{complaint.description}</Typography>
+                  <Typography variant="body1">
+                    {complaint.description}
+                  </Typography>
                 </Box>
               </Box>
 
-              <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 2, mb: 3 }}>
+              <Box
+                sx={{ display: 'flex', alignItems: 'flex-start', gap: 2, mb: 3 }}
+              >
                 <LocationOn color="action" />
                 <Box>
                   <Typography variant="caption" color="text.secondary">
@@ -567,7 +664,9 @@ export const ComplaintDetail: React.FC = () => {
                 </Box>
               </Box>
 
-              <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 2, mb: 3 }}>
+              <Box
+                sx={{ display: 'flex', alignItems: 'flex-start', gap: 2, mb: 3 }}
+              >
                 <Person color="action" />
                 <Box>
                   <Typography variant="caption" color="text.secondary">
@@ -601,15 +700,138 @@ export const ComplaintDetail: React.FC = () => {
                 </Box>
               </Box>
 
+              {/* Driver Completion Proof */}
+              {complaint.completionProof &&
+                (complaint.completionProof.beforePhoto ||
+                  complaint.completionProof.afterPhoto) && (
+                  <>
+                    <Divider sx={{ my: 3 }} />
+                    <Box
+                      sx={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 1,
+                        mb: 2,
+                      }}
+                    >
+                      <VerifiedUser color="success" />
+                      <Typography variant="h6" color="success.main">
+                        Driver Completion Proof
+                      </Typography>
+                    </Box>
+
+                    <Alert severity="success" sx={{ mb: 2 }}>
+                      The response unit has attended to this complaint. Below is
+                      the before and after evidence.
+                    </Alert>
+
+                    <Grid container spacing={2}>
+                      {complaint.completionProof.beforePhoto && (
+                        <Grid size={{ xs: 12, sm: 6 }}>
+                          <Typography
+                            variant="caption"
+                            color="text.secondary"
+                            sx={{ fontWeight: 600 }}
+                          >
+                            📷 BEFORE
+                          </Typography>
+                          <Box
+                            component="img"
+                            src={complaint.completionProof.beforePhoto}
+                            alt="Before"
+                            loading="lazy"
+                            sx={{
+                              width: '100%',
+                              height: 200,
+                              objectFit: 'cover',
+                              borderRadius: 2,
+                              mt: 0.5,
+                              border: '2px solid',
+                              borderColor: 'warning.light',
+                              cursor: 'pointer',
+                            }}
+                            onClick={() =>
+                              setPreviewPhoto(
+                                complaint.completionProof!.beforePhoto
+                              )
+                            }
+                          />
+                        </Grid>
+                      )}
+
+                      {complaint.completionProof.afterPhoto && (
+                        <Grid size={{ xs: 12, sm: 6 }}>
+                          <Typography
+                            variant="caption"
+                            color="text.secondary"
+                            sx={{ fontWeight: 600 }}
+                          >
+                            ✅ AFTER
+                          </Typography>
+                          <Box
+                            component="img"
+                            src={complaint.completionProof.afterPhoto}
+                            alt="After"
+                            loading="lazy"
+                            sx={{
+                              width: '100%',
+                              height: 200,
+                              objectFit: 'cover',
+                              borderRadius: 2,
+                              mt: 0.5,
+                              border: '2px solid',
+                              borderColor: 'success.light',
+                              cursor: 'pointer',
+                            }}
+                            onClick={() =>
+                              setPreviewPhoto(
+                                complaint.completionProof!.afterPhoto
+                              )
+                            }
+                          />
+                        </Grid>
+                      )}
+                    </Grid>
+
+                    {complaint.completionProof.completedAt && (
+                      <Typography
+                        variant="caption"
+                        color="text.secondary"
+                        sx={{ display: 'block', mt: 1.5 }}
+                      >
+                        Completed:{' '}
+                        {formatDateTime(complaint.completionProof.completedAt)}
+                      </Typography>
+                    )}
+                  </>
+                )}
+
+              {/* Original Photos */}
               {complaint.photos && complaint.photos.length > 0 && (
                 <>
                   <Divider sx={{ my: 3 }} />
-                  <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-                    Photos ({complaint.photos.length})
+                  <Typography
+                    variant="subtitle2"
+                    color="text.secondary"
+                    gutterBottom
+                  >
+                    Original Photos ({complaint.photos.length}) — click to
+                    enlarge
                   </Typography>
                   <ImageList cols={3} rowHeight={160} sx={{ mt: 1 }}>
                     {complaint.photos.map((photo, index) => (
-                      <ImageListItem key={index}>
+                      <ImageListItem
+                        key={index}
+                        onClick={() => setPreviewPhoto(photo)}
+                        sx={{
+                          cursor: 'pointer',
+                          transition: 'transform 0.2s',
+                          '&:hover': {
+                            transform: 'scale(1.03)',
+                            boxShadow: 3,
+                          },
+                        }}
+                      >
                         <img
                           src={photo}
                           alt={`Photo ${index + 1}`}
@@ -670,7 +892,14 @@ export const ComplaintDetail: React.FC = () => {
                       </ListItemAvatar>
                       <ListItemText
                         primary={
-                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+                          <Box
+                            sx={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: 1,
+                              flexWrap: 'wrap',
+                            }}
+                          >
                             <Typography variant="subtitle2">
                               {comment.author?.name || 'Unknown'}
                             </Typography>
@@ -680,7 +909,11 @@ export const ComplaintDetail: React.FC = () => {
                               variant="outlined"
                             />
                             {comment.isInternal && (
-                              <Chip label="INTERNAL" size="small" color="warning" />
+                              <Chip
+                                label="INTERNAL"
+                                size="small"
+                                color="warning"
+                              />
                             )}
                           </Box>
                         }
@@ -756,19 +989,31 @@ export const ComplaintDetail: React.FC = () => {
               <Divider sx={{ my: 2 }} />
 
               <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                {/* ASSIGN TRUCK BUTTON */}
-                {complaint.status !== 'resolved' && complaint.status !== 'rejected' && (
-                  <Button
-                    variant="contained"
-                    color="primary"
-                    fullWidth
-                    onClick={() => setShowAssignDialog(true)}
-                    disabled={actionLoading}
-                    size="large"
-                  >
-                    🚛 Assign Truck to This Complaint
-                  </Button>
-                )}
+                {complaint.status !== 'resolved' &&
+                  complaint.status !== 'rejected' && (
+                    <Button
+                      variant="contained"
+                      color="primary"
+                      fullWidth
+                      onClick={() => setShowAssignDialog(true)}
+                      disabled={actionLoading}
+                      size="large"
+                    >
+                      🚛 Assign Response Unit
+                    </Button>
+                  )}
+
+                <Button
+                  variant="contained"
+                  color="info"
+                  fullWidth
+                  startIcon={<SendIcon />}
+                  onClick={() => setShowRespondDialog(true)}
+                  disabled={actionLoading}
+                  size="large"
+                >
+                  📨 Send Response to Reporter
+                </Button>
 
                 {complaint.status === 'pending' && (
                   <>
@@ -845,7 +1090,7 @@ export const ComplaintDetail: React.FC = () => {
             </Typography>
             <Typography variant="body2" sx={{ mt: 0.5 }}>
               {complaint.status === 'pending'
-                ? 'Assign a truck based on the complaint zone, or mark it In Progress.'
+                ? 'Assign a response unit based on the complaint zone, or mark it In Progress.'
                 : complaint.status === 'in-progress'
                 ? 'Once the collection is done, mark this complaint as Resolved.'
                 : 'This complaint is closed.'}
@@ -861,32 +1106,35 @@ export const ComplaintDetail: React.FC = () => {
         maxWidth="sm"
         fullWidth
       >
-        <DialogTitle>Assign Truck to Complaint</DialogTitle>
+        <DialogTitle>Assign Response Unit</DialogTitle>
         <DialogContent>
           <Alert severity="info" sx={{ mb: 2 }}>
             <strong>Complaint Zone:</strong> {complaint.zone || 'Not specified'}
           </Alert>
 
           <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-            Only trucks in this zone are shown below. The complaint will be added
-            as a new stop on the selected truck's active route.
+            Only response units in this zone are shown below. The complaint will
+            be added as a new stop on the selected unit's active route.
           </Typography>
 
           <FormControl fullWidth sx={{ mt: 2 }}>
-            <InputLabel>Select Truck</InputLabel>
+            <InputLabel>Select Response Unit</InputLabel>
             <Select
               value={selectedTruckId}
               onChange={(e) => setSelectedTruckId(e.target.value)}
-              label="Select Truck"
+              label="Select Response Unit"
             >
               {trucks.length === 0 ? (
                 <MenuItem value="" disabled>
-                  No trucks available
+                  No units available
                 </MenuItem>
               ) : (
                 trucks.map((truck) => (
                   <MenuItem key={truck.id} value={truck.id}>
-                    {truck.truckId} - {truck.zone} ({truck.driverName || 'Unassigned'})
+                    {truck.truckType === 'response-unit' ? '🚨' : '🚛'}{' '}
+                    {truck.truckId} - {truck.zone} (
+                    {truck.driverName || 'Unassigned'})
+                    {truck.truckType === 'response-unit' && ' — RESPONSE UNIT'}
                   </MenuItem>
                 ))
               )}
@@ -901,13 +1149,81 @@ export const ComplaintDetail: React.FC = () => {
             disabled={!selectedTruckId || assigning}
             startIcon={assigning ? <CircularProgress size={20} /> : null}
           >
-            {assigning ? 'Assigning...' : 'Assign Truck'}
+            {assigning ? 'Assigning...' : 'Assign Response Unit'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Send Response Dialog */}
+      <Dialog
+        open={showRespondDialog}
+        onClose={() => setShowRespondDialog(false)}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>Send Response</DialogTitle>
+        <DialogContent>
+          <Alert severity="info" sx={{ mb: 2 }}>
+            Your response will be visible to the reporter and any assigned
+            response units. Use this for emergency alerts, clarifications, or
+            status updates.
+          </Alert>
+
+          {complaint.adminResponse && (
+            <Alert severity="success" sx={{ mb: 2 }}>
+              <strong>Previous response:</strong>
+              <br />
+              {complaint.adminResponse}
+              <Typography variant="caption" sx={{ display: 'block', mt: 0.5 }}>
+                Sent:{' '}
+                {complaint.adminRespondedAt
+                  ? formatDateTime(complaint.adminRespondedAt)
+                  : 'Unknown'}
+              </Typography>
+            </Alert>
+          )}
+
+          <TextField
+            fullWidth
+            multiline
+            rows={4}
+            label="Your Response *"
+            value={respondText}
+            onChange={(e) => setRespondText(e.target.value)}
+            placeholder="e.g., Response unit dispatched to your location. ETA 15 minutes."
+            autoFocus
+          />
+        </DialogContent>
+        <DialogActions sx={{ p: 2 }}>
+          <Button
+            onClick={() => setShowRespondDialog(false)}
+            disabled={responding}
+          >
+            Cancel
+          </Button>
+          <Button
+            variant="contained"
+            color="info"
+            onClick={handleSendResponse}
+            disabled={!respondText.trim() || responding}
+            startIcon={
+              responding ? (
+                <CircularProgress size={20} color="inherit" />
+              ) : (
+                <SendIcon />
+              )
+            }
+          >
+            {responding ? 'Sending...' : 'Send Response'}
           </Button>
         </DialogActions>
       </Dialog>
 
       {/* Reject Confirmation Dialog */}
-      <Dialog open={openRejectDialog} onClose={() => setOpenRejectDialog(false)}>
+      <Dialog
+        open={openRejectDialog}
+        onClose={() => setOpenRejectDialog(false)}
+      >
         <DialogTitle>Reject Complaint</DialogTitle>
         <DialogContent>
           <DialogContentText>
@@ -927,6 +1243,60 @@ export const ComplaintDetail: React.FC = () => {
             Reject
           </Button>
         </DialogActions>
+      </Dialog>
+
+      {/* Photo Preview Dialog */}
+      <Dialog
+        open={!!previewPhoto}
+        onClose={() => setPreviewPhoto(null)}
+        maxWidth="lg"
+        fullWidth
+        slotProps={{
+          paper: {
+            sx: {
+              bgcolor: 'rgba(0,0,0,0.95)',
+              backgroundImage: 'none',
+            },
+          },
+        }}
+      >
+        <DialogTitle
+          sx={{
+            color: 'white',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+          }}
+        >
+          Photo Preview
+          <IconButton
+            onClick={() => setPreviewPhoto(null)}
+            sx={{ color: 'white' }}
+          >
+            <CloseIcon />
+          </IconButton>
+        </DialogTitle>
+        <DialogContent
+          sx={{
+            display: 'flex',
+            justifyContent: 'center',
+            alignItems: 'center',
+            p: 2,
+          }}
+        >
+          {previewPhoto && (
+            <img
+              src={previewPhoto}
+              alt="Enlarged preview"
+              style={{
+                maxWidth: '100%',
+                maxHeight: '80vh',
+                objectFit: 'contain',
+                borderRadius: 4,
+              }}
+            />
+          )}
+        </DialogContent>
       </Dialog>
 
       {/* Snackbar */}

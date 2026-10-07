@@ -42,7 +42,7 @@ import type { IssueType } from '../../Services/reportService';
 // ============================================
 interface ReportFormData {
   location: string;
-  zone: string; // ADDED
+  zone: string;
   issueType: string;
   description: string;
   contactName: string;
@@ -52,7 +52,7 @@ interface ReportFormData {
 
 const INITIAL_FORM: ReportFormData = {
   location: '',
-  zone: '', // ADDED
+  zone: '',
   issueType: '',
   description: '',
   contactName: '',
@@ -67,7 +67,7 @@ const ISSUE_TYPES = [
   { value: 'other', label: 'Other Issue' },
 ];
 
-// ADDED: Zone options with their suburbs
+// Zone options with their suburbs
 const ZONE_OPTIONS = [
   { value: 'Zone 1', label: 'Zone 1 (5 Mile, 6 Mile, Boroko)' },
   { value: 'Zone 2', label: 'Zone 2 (Erima, Gordons)' },
@@ -182,7 +182,6 @@ export const CitizenPortal: React.FC = () => {
   };
 
   const handleSubmit = async () => {
-    // UPDATED: Now requires 'zone'
     if (!formData.location.trim()) {
       showSnackbar('Please enter a location', 'warning');
       return;
@@ -197,6 +196,15 @@ export const CitizenPortal: React.FC = () => {
     }
     if (!formData.description.trim()) {
       showSnackbar('Please provide a description', 'warning');
+      return;
+    }
+
+    // ✅ IMPROVEMENT 2: Photos are now compulsory
+    if (photos.length === 0) {
+      showSnackbar(
+        'Please attach at least one photo as evidence of the issue.',
+        'warning'
+      );
       return;
     }
 
@@ -228,7 +236,7 @@ export const CitizenPortal: React.FC = () => {
         issueType: formData.issueType as IssueType,
         description: formData.description,
         address: formData.location,
-        zone: formData.zone, // ADDED
+        zone: formData.zone,
         latitude,
         longitude,
         photos: uploadedPhotoUrls,
@@ -349,7 +357,7 @@ export const CitizenPortal: React.FC = () => {
                   </Box>
                 </Grid>
 
-                {/* ADDED: Zone Selection */}
+                {/* Zone Selection */}
                 <Grid size={{ xs: 12 }}>
                   <FormControl fullWidth required>
                     <InputLabel>Zone *</InputLabel>
@@ -399,20 +407,31 @@ export const CitizenPortal: React.FC = () => {
                   />
                 </Grid>
 
-                {/* Photo Upload */}
+                {/* ✅ Photo Upload — now required */}
                 <Grid size={{ xs: 12 }}>
                   <Typography variant="subtitle2" gutterBottom>
-                    Attach Photos (Optional)
+                    Attach Photos{' '}
+                    <span style={{ color: '#d32f2f' }}>*</span>
                   </Typography>
                   <Typography
                     variant="caption"
                     color="text.secondary"
                     sx={{ display: 'block', mb: 2 }}
                   >
-                    Upload up to {MAX_PHOTOS} photos
+                    Upload at least 1 photo, up to {MAX_PHOTOS}
                   </Typography>
 
-                  <Box sx={{ mb: 2 }}>
+                  <Box
+                    sx={{
+                      mb: 2,
+                      p: 2,
+                      border:
+                        photos.length === 0
+                          ? '1px dashed #d32f2f'
+                          : '1px dashed transparent',
+                      borderRadius: 1,
+                    }}
+                  >
                     <input
                       type="file"
                       accept="image/*"
@@ -428,6 +447,7 @@ export const CitizenPortal: React.FC = () => {
                         component="span"
                         startIcon={<PhotoCamera />}
                         disabled={photos.length >= MAX_PHOTOS}
+                        color={photos.length === 0 ? 'error' : 'primary'}
                       >
                         Add Photos ({photos.length}/{MAX_PHOTOS})
                       </Button>
@@ -442,7 +462,9 @@ export const CitizenPortal: React.FC = () => {
                   </Box>
 
                   {photoUrls.length > 0 && (
-                    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2, mt: 2 }}>
+                    <Box
+                      sx={{ display: 'flex', flexWrap: 'wrap', gap: 2, mt: 2 }}
+                    >
                       {photoUrls.map((url, index) => (
                         <Box
                           key={index}

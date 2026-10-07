@@ -17,13 +17,28 @@ export interface ReportData {
   issueType: IssueType;
   description: string;
   address: string;
-  zone?: string; // ADDED
+  zone?: string;
   latitude?: number;
   longitude?: number;
   photos?: string[];
   contactName?: string;
   contactPhone?: string;
   contactEmail?: string;
+}
+
+export interface AdminComment {
+  id: string;
+  content: string;
+  createdAt: string;
+  authorName: string;
+  authorRole: string;
+}
+
+// ✅ IMPROVEMENT 4: Completion proof type
+export interface CompletionProof {
+  beforePhoto: string | null;
+  afterPhoto: string | null;
+  completedAt: string | null;
 }
 
 export interface Report extends ReportData {
@@ -41,6 +56,19 @@ export interface Report extends ReportData {
     email: string;
     phone?: string | null;
   };
+  adminComments?: AdminComment[];
+
+  // ✅ Feature 1: Admin response to FAB alert / report
+  adminResponse?: string | null;
+  adminRespondedAt?: string | null;
+  adminRespondedBy?: string | null;
+
+  // ✅ Excel enhancements
+  assignedTruck?: string | null;
+  assignedDriver?: string | null;
+
+  // ✅ IMPROVEMENT 4: Completion proof from driver
+  completionProof?: CompletionProof | null;
 }
 
 export interface ReportStats {
@@ -67,10 +95,38 @@ export interface Comment {
   };
 }
 
+export interface EmergencyResponse {
+  id: string;
+  emergencyType: string;
+  adminResponse: string;
+  respondedAt: string;
+  createdAt: string;
+   isResolved?: boolean;
+  resolvedAt?: string | null;
+}
+
 // ============================================
 // REPORT SERVICE
 // ============================================
 export const reportService = {
+  // ✅ Admin responds to a report / emergency
+  respondToReport: async (
+    id: string,
+    response: string
+  ): Promise<{ message: string; report: Report }> => {
+    const res = await api.post(`/reports/${id}/respond`, { response });
+    return res.data;
+  },
+
+  // ✅ Driver fetches admin responses to their alerts
+  getMyEmergencyResponses: async (): Promise<{
+    count: number;
+    responses: EmergencyResponse[];
+  }> => {
+    const res = await api.get('/reports/my-emergency-responses');
+    return res.data;
+  },
+
   createReport: async (
     data: ReportData
   ): Promise<{ message: string; report: Report }> => {
@@ -97,7 +153,7 @@ export const reportService = {
     status?: string;
     priority?: string;
     issueType?: string;
-    zone?: string; // ADDED
+    zone?: string;
     limit?: number;
     offset?: number;
   }): Promise<{ total: number; reports: Report[] }> => {
@@ -184,5 +240,16 @@ export const reportService = {
     });
 
     return response.data;
+  },
+
+  // ✅ NEW: Fetch just the completion proof for a specific report
+  // Useful if you want to refresh proof without fetching the whole report
+  getReportCompletionProof: async (
+    id: string
+  ): Promise<{ completionProof: CompletionProof | null }> => {
+    const response = await api.get(`/reports/${id}`);
+    return {
+      completionProof: response.data.report?.completionProof || null,
+    };
   },
 };

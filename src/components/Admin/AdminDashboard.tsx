@@ -67,6 +67,7 @@ interface ResetWeekResponse {
     stops: number;
     routes: number;
     trucks: number;
+    complaints: number;
   };
 }
 
@@ -95,6 +96,12 @@ export const AdminDashboard: React.FC = () => {
   const [showResetDialog, setShowResetDialog] = useState(false);
   const [resetConfirmText, setResetConfirmText] = useState('');
   const [resetLoading, setResetLoading] = useState(false);
+
+  // ✅ IMPROVEMENT 6: Track "last seen" timestamp (state), derive new-complaints flag during render
+  const [lastSeenTimestamp, setLastSeenTimestamp] = useState<number>(() => {
+    const stored = localStorage.getItem('admin_last_complaints_seen');
+    return stored ? new Date(stored).getTime() : 0;
+  });
 
   const [tabValue, setTabValue] = useState<number>(
     (location.state as { tab?: number })?.tab ?? 0
@@ -198,8 +205,15 @@ export const AdminDashboard: React.FC = () => {
     }
   };
 
+  // ✅ IMPROVEMENT 6: Mark as seen when switching to Complaints tab
   const handleTabChange = (_event: React.SyntheticEvent, newValue: number) => {
     setTabValue(newValue);
+
+    if (newValue === 2) {
+      const now = new Date().toISOString();
+      localStorage.setItem('admin_last_complaints_seen', now);
+      setLastSeenTimestamp(new Date(now).getTime());
+    }
   };
 
   // ============================================
@@ -227,6 +241,7 @@ export const AdminDashboard: React.FC = () => {
 
   // ============================================
   // RESET WEEK
+  // ✅ IMPROVEMENT 5b (REVISED): Now archives instead of deletes
   // ============================================
   const handleResetWeek = async () => {
     if (resetConfirmText !== 'RESET') return;
@@ -240,7 +255,9 @@ export const AdminDashboard: React.FC = () => {
         `✅ Week reset successfully!\n\n` +
           `Reset: ${data.reset.routes} routes, ` +
           `${data.reset.stops} stops, ` +
-          `${data.reset.trucks} trucks`
+          `${data.reset.trucks} trucks\n` +
+          `Archived: ${data.reset.complaints} complaints\n\n` +
+          `Note: Citizens can still see their own reports in "My Reports".`
       );
 
       setShowResetDialog(false);
@@ -303,6 +320,16 @@ export const AdminDashboard: React.FC = () => {
         },
       ]
     : [];
+
+  // ============================================
+  // ✅ IMPROVEMENT 6: Derive "has new complaints" during render
+  // ============================================
+  const hasNewComplaints =
+    complaints.length > 0 &&
+    tabValue !== 2 &&
+    complaints.some(
+      (c) => new Date(c.createdAt).getTime() > lastSeenTimestamp
+    );
 
   // ============================================
   // LOADING
@@ -449,7 +476,29 @@ export const AdminDashboard: React.FC = () => {
         <Tabs value={tabValue} onChange={handleTabChange}>
           <Tab label="Fleet Status" />
           <Tab label="Route Performance" />
-          <Tab label={`Complaints (${complaints.length})`} />
+          <Tab
+            label={
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                Complaints ({complaints.length})
+                {hasNewComplaints && (
+                  <Box
+                    sx={{
+                      width: 8,
+                      height: 8,
+                      borderRadius: '50%',
+                      bgcolor: 'error.main',
+                      animation: 'pulse 2s infinite',
+                      '@keyframes pulse': {
+                        '0%': { opacity: 1, transform: 'scale(1)' },
+                        '50%': { opacity: 0.5, transform: 'scale(1.3)' },
+                        '100%': { opacity: 1, transform: 'scale(1)' },
+                      },
+                    }}
+                  />
+                )}
+              </Box>
+            }
+          />
         </Tabs>
       </Paper>
 
@@ -465,6 +514,7 @@ export const AdminDashboard: React.FC = () => {
                 <TableHead>
                   <TableRow>
                     <TableCell>Truck ID</TableCell>
+                    <TableCell>Type</TableCell>
                     <TableCell>Driver</TableCell>
                     <TableCell>Zone</TableCell>
                     <TableCell>Collection Days</TableCell>
@@ -477,20 +527,57 @@ export const AdminDashboard: React.FC = () => {
                   {trucks.map((truck) => (
                     <TableRow key={truck.id}>
                       <TableCell>{truck.truckId}</TableCell>
+                      <TableCell>
+                        <Chip
+                          label={
+                            truck.truckType === 'response-unit'
+                              ? '🚨 RESPONSE'
+                              : '🚛 COLLECTION'
+                          }
+                          size="small"
+                          color={
+                            truck.truckType === 'response-unit'
+                              ? 'error'
+                              : 'default'
+                          }
+                          variant={
+                            truck.truckType === 'response-unit'
+                              ? 'filled'
+                              : 'outlined'
+                          }
+                          sx={{ fontSize: '0.7rem', height: 22 }}
+                        />
+                      </TableCell>
                       <TableCell>{truck.driverName}</TableCell>
                       <TableCell>{truck.zone}</TableCell>
                       <TableCell>
-                        <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
-                          {(truck.workingDays || []).map((day) => (
-                            <Chip
-                              key={day}
-                              label={day.slice(0, 3).toUpperCase()}
-                              size="small"
-                              variant="outlined"
-                              sx={{ fontSize: '0.65rem', height: 20 }}
-                            />
-                          ))}
-                        </Box>
+                        {truck.truckType === 'response-unit' ? (
+                          <Chip
+                            label="ON-CALL"
+                            size="small"
+                            color="error"
+                            variant="outlined"
+                            sx={{ fontSize: '0.65rem', height: 20 }}
+                          />
+                        ) : (
+                          <Box
+                            sx={{
+                              display: 'flex',
+                              gap: 0.5,
+                              flexWrap: 'wrap',
+                            }}
+                          >
+                            {(truck.workingDays || []).map((day) => (
+                              <Chip
+                                key={day}
+                                label={day.slice(0, 3).toUpperCase()}
+                                size="small"
+                                variant="outlined"
+                                sx={{ fontSize: '0.65rem', height: 20 }}
+                              />
+                            ))}
+                          </Box>
+                        )}
                       </TableCell>
                       <TableCell>
                         <Chip
@@ -525,15 +612,26 @@ export const AdminDashboard: React.FC = () => {
                         </Box>
                       </TableCell>
                       <TableCell>
-                        <Button
-                          size="small"
-                          variant="outlined"
-                          onClick={() =>
-                            navigate(`/admin/route/${truck.truckId}`)
-                          }
-                        >
-                          View Route
-                        </Button>
+                        {/* ✅ IMPROVEMENT 2: Hide "View Route" button for response units */}
+                        {truck.truckType !== 'response-unit' ? (
+                          <Button
+                            size="small"
+                            variant="outlined"
+                            onClick={() =>
+                              navigate(`/admin/route/${truck.truckId}`)
+                            }
+                          >
+                            View Route
+                          </Button>
+                        ) : (
+                          <Chip
+                            label="Standby"
+                            size="small"
+                            variant="outlined"
+                            color="error"
+                            sx={{ fontSize: '0.7rem' }}
+                          />
+                        )}
                       </TableCell>
                     </TableRow>
                   ))}
@@ -831,6 +929,12 @@ export const AdminDashboard: React.FC = () => {
                           variant="outlined"
                           onClick={(e) => {
                             e.stopPropagation();
+                            const now = new Date().toISOString();
+                            localStorage.setItem(
+                              'admin_last_complaints_seen',
+                              now
+                            );
+                            setLastSeenTimestamp(new Date(now).getTime());
                             navigate(`/admin/complaint/${complaint.id}`);
                           }}
                         >
@@ -859,6 +963,7 @@ export const AdminDashboard: React.FC = () => {
 
       {/* ============================================
           RESET WEEK CONFIRMATION DIALOG
+          ✅ UPDATED: Mentions "Archive" instead of "Delete"
       ============================================ */}
       <Dialog
         open={showResetDialog}
@@ -880,7 +985,7 @@ export const AdminDashboard: React.FC = () => {
           <Alert severity="warning" sx={{ mb: 3 }}>
             <strong>This will reset the current week's progress.</strong>
             <br />
-            Routes and schedules are permanent and will not be deleted.
+            Routes, schedules, and citizen reports are permanent.
           </Alert>
 
           <Typography variant="body1" gutterBottom>
@@ -904,12 +1009,15 @@ export const AdminDashboard: React.FC = () => {
               Set <strong>truck statuses</strong> to <em>available</em>{' '}
               (maintenance/offline preserved)
             </li>
+            <li>
+              <strong>Archive all complaints</strong> reported this week
+              (hidden from Complaint tab)
+            </li>
           </Box>
 
           <Alert severity="info" sx={{ mt: 3 }}>
-            <strong>Routes and complaints are kept.</strong> Only the progress
-            from this week is cleared, so the same routes can run fresh next
-            week.
+            <strong>Note:</strong> Citizens will still see their own reports in
+            "My Reports". Only this Admin Complaint tab will hide them.
           </Alert>
 
           <Alert severity="warning" sx={{ mt: 2 }}>

@@ -11,6 +11,7 @@ import {
   ListItem,
   ListItemText,
   ListItemIcon,
+  Avatar,
   Chip,
   LinearProgress,
   Paper,
@@ -27,6 +28,9 @@ import {
   InputLabel,
   Select,
   MenuItem,
+  Divider,
+  ImageList,
+  ImageListItem,
 } from '@mui/material';
 import {
   Route as RouteIcon,
@@ -40,11 +44,15 @@ import {
   Delete,
   SkipNext,
   Refresh,
+  ChatBubbleOutlineOutlined,
+  Close as CloseIcon,
+  MyLocation as MyLocationIcon,
 } from '@mui/icons-material';
 import {
   routeService,
   type Route,
   type RouteStop,
+  type ReportCommentSummary,
 } from '../../Services/routeService';
 import { uploadService } from '../../Services/uploadService';
 import { reportService } from '../../Services/reportService';
@@ -60,6 +68,9 @@ const EMERGENCY_TYPES = [
   { value: 'other', label: '⚠️ Other Emergency' },
 ];
 
+// localStorage key for dismissed FAB responses
+const DISMISSED_RESPONSES_KEY = 'driver_dismissed_emergency_responses';
+
 // ============================================
 // COMPONENT
 // ============================================
@@ -73,6 +84,9 @@ export const DriverPortal: React.FC = () => {
   const [selectedStop, setSelectedStop] = useState<RouteStop | null>(null);
   const [showSkipDialog, setShowSkipDialog] = useState(false);
   const [skipReason, setSkipReason] = useState('');
+
+  // Photo preview state
+  const [previewPhoto, setPreviewPhoto] = useState<string | null>(null);
 
   // Photo dialog state
   const [showPhotoDialog, setShowPhotoDialog] = useState(false);
@@ -89,6 +103,40 @@ export const DriverPortal: React.FC = () => {
   const [emergencyDescription, setEmergencyDescription] = useState('');
   const [emergencySubmitting, setEmergencySubmitting] = useState(false);
 
+  // GPS location state for emergency alerts
+  const [emergencyLocation, setEmergencyLocation] = useState<{
+    latitude: number;
+    longitude: number;
+    accuracy?: number;
+  } | null>(null);
+  const [locationFetching, setLocationFetching] = useState(false);
+  const [locationError, setLocationError] = useState('');
+
+  // Admin responses to my emergency alerts
+  const [emergencyResponses, setEmergencyResponses] = useState<
+    Array<{
+      id: string;
+      emergencyType: string;
+      adminResponse: string;
+      respondedAt: string;
+      createdAt: string;
+      isResolved?: boolean;
+      resolvedAt?: string | null;
+    }>
+  >([]);
+
+  // ✅ #6: Dismissed responses persisted to localStorage
+  const [dismissedResponses, setDismissedResponses] = useState<string[]>(
+    () => {
+      try {
+        const stored = localStorage.getItem(DISMISSED_RESPONSES_KEY);
+        return stored ? JSON.parse(stored) : [];
+      } catch {
+        return [];
+      }
+    }
+  );
+
   // ============================================
   // LOAD TODAY'S ROUTE
   // ============================================
@@ -101,18 +149,8 @@ export const DriverPortal: React.FC = () => {
 
       try {
         const data = await routeService.getTodaysRoute();
-        
-        // --- DEBUGGING ADDED HERE ---
-        console.log("🔍 API Response for Today's Route:", data);
-        // ----------------------------
-
         if (isMounted) {
-          // Check if data exists and has a route property
-          if (data && data.route) {
-            setRoute(data.route);
-          } else {
-            setRoute(null); // Explicitly set to null if no route
-          }
+          setRoute(data && data.route ? data.route : null);
         }
       } catch (err: unknown) {
         const error = err as {
@@ -138,6 +176,54 @@ export const DriverPortal: React.FC = () => {
       isMounted = false;
     };
   }, []);
+
+  // ============================================
+  // POLL FOR ADMIN RESPONSES TO MY EMERGENCY ALERTS
+  // ✅ #6: Faster poll (10s) when there are active responses, slower (30s) otherwise
+  // ============================================
+  useEffect(() => {
+    let isMounted = true;
+
+    const fetchResponses = async () => {
+      try {
+        const data = await reportService.getMyEmergencyResponses();
+        if (isMounted) {
+          setEmergencyResponses(data.responses || []);
+        }
+      } catch (err) {
+        console.error('Failed to fetch emergency responses:', err);
+      }
+    };
+
+    fetchResponses();
+
+    // Determine poll speed: 10s if there's an active response, else 30s
+    const hasActiveResponse = emergencyResponses.some(
+      (r) => !r.isResolved && !dismissedResponses.includes(r.id)
+    );
+    const interval = hasActiveResponse ? 10000 : 30000;
+
+    const intervalId = setInterval(fetchResponses, interval);
+
+    return () => {
+      isMounted = false;
+      clearInterval(intervalId);
+    };
+  }, [emergencyResponses, dismissedResponses]);
+
+  // ============================================
+  // ✅ #6: Persist dismissals to localStorage
+  // ============================================
+  useEffect(() => {
+    try {
+      localStorage.setItem(
+        DISMISSED_RESPONSES_KEY,
+        JSON.stringify(dismissedResponses)
+      );
+    } catch (err) {
+      console.error('Failed to persist dismissed responses:', err);
+    }
+  }, [dismissedResponses]);
 
   // ============================================
   // REFRESH ROUTE
@@ -248,15 +334,21 @@ export const DriverPortal: React.FC = () => {
         afterPhoto: afterPhotoUrl || undefined,
       });
 
-      setRoute((prev) => {
-        if (!prev || !prev.stops) return prev;
-        return {
-          ...prev,
-          completedStops: response.routeProgress.completedStops,
-          status: response.routeProgress.routeStatus,
-          stops: prev.stops.map((s) => (s.id === stop.id ? response.stop : s)),
-        };
-      });
+      if (stop.isComplaintStop) {
+        await refreshRoute();
+      } else {
+        setRoute((prev) => {
+          if (!prev || !prev.stops) return prev;
+          return {
+            ...prev,
+            completedStops: response.routeProgress.completedStops,
+            status: response.routeProgress.routeStatus,
+            stops: prev.stops.map((s) =>
+              s.id === stop.id ? response.stop : s
+            ),
+          };
+        });
+      }
 
       removePhoto('before');
       removePhoto('after');
@@ -327,25 +419,83 @@ export const DriverPortal: React.FC = () => {
   };
 
   // ============================================
+  // FETCH CURRENT GPS LOCATION FOR EMERGENCY
+  // ============================================
+  const fetchEmergencyLocation = (): Promise<{
+    latitude: number;
+    longitude: number;
+    accuracy?: number;
+  } | null> => {
+    return new Promise((resolve) => {
+      if (!navigator.geolocation) {
+        setLocationError('Geolocation is not supported');
+        resolve(null);
+        return;
+      }
+
+      setLocationFetching(true);
+      setLocationError('');
+
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          const { latitude, longitude, accuracy } = position.coords;
+          setEmergencyLocation({ latitude, longitude, accuracy });
+          setLocationFetching(false);
+          resolve({ latitude, longitude, accuracy });
+        },
+        (err) => {
+          console.error('Geolocation error:', err);
+          setLocationError(
+            'Could not get precise GPS. Using last known stop location.'
+          );
+          setLocationFetching(false);
+          resolve(null);
+        },
+        {
+          enableHighAccuracy: true,
+          timeout: 10000,
+          maximumAge: 0,
+        }
+      );
+    });
+  };
+
+  // ============================================
   // EMERGENCY DISPATCH
   // ============================================
-  const handleOpenEmergencyDialog = () => {
+  const handleOpenEmergencyDialog = async () => {
     setEmergencyType('breakdown');
     setEmergencyDescription('');
+    setEmergencyLocation(null);
+    setLocationError('');
     setOpenEmergencyDialog(true);
+
+    await fetchEmergencyLocation();
   };
 
   const handleSendEmergency = async () => {
     setEmergencySubmitting(true);
     try {
-      // Get current stop location as reference
-      const currentStop = route?.stops?.find((s) => s.status === 'pending');
-      const latitude = currentStop?.latitude
-        ? Number(currentStop.latitude)
-        : -9.4438;
-      const longitude = currentStop?.longitude
-        ? Number(currentStop.longitude)
-        : 147.1803;
+      let latitude: number;
+      let longitude: number;
+      let locationSource = '';
+
+      if (emergencyLocation) {
+        latitude = emergencyLocation.latitude;
+        longitude = emergencyLocation.longitude;
+        locationSource = `Live GPS (±${Math.round(
+          emergencyLocation.accuracy || 0
+        )}m)`;
+      } else {
+        const currentStop = route?.stops?.find((s) => s.status === 'pending');
+        latitude = currentStop?.latitude
+          ? Number(currentStop.latitude)
+          : -9.4438;
+        longitude = currentStop?.longitude
+          ? Number(currentStop.longitude)
+          : 147.1803;
+        locationSource = 'Last known route stop';
+      }
 
       await reportService.createEmergencyAlert({
         emergencyType:
@@ -357,7 +507,11 @@ export const DriverPortal: React.FC = () => {
       });
 
       setOpenEmergencyDialog(false);
-      alert('🚨 Emergency alert sent to dispatch successfully!');
+      alert(
+        `🚨 Emergency alert sent to dispatch!\n\nLocation shared: ${latitude.toFixed(
+          6
+        )}, ${longitude.toFixed(6)}\nSource: ${locationSource}`
+      );
     } catch (err: unknown) {
       const error = err as {
         response?: { data?: { message?: string; error?: string } };
@@ -401,6 +555,15 @@ export const DriverPortal: React.FC = () => {
     }
   };
 
+  // ✅ #6: Only show responses that are:
+  //   1. Not dismissed by the driver (checked against persisted localStorage)
+  //   2. Not resolved by the admin (isResolved === false)
+  const activeResponses = emergencyResponses.filter(
+    (r) =>
+      !dismissedResponses.includes(r.id) &&
+      !r.isResolved
+  );
+
   // ============================================
   // LOADING / ERROR
   // ============================================
@@ -438,6 +601,50 @@ export const DriverPortal: React.FC = () => {
   return (
     <Container maxWidth="xl" sx={{ py: 4 }}>
       <Grid container spacing={3}>
+        {/* ✅ ADMIN RESPONSES TO EMERGENCY ALERTS */}
+        {activeResponses.map((response) => (
+          <Grid size={{ xs: 12 }} key={response.id}>
+            <Alert
+              severity="success"
+              icon={<CheckCircle />}
+              onClose={() =>
+                setDismissedResponses((prev) => [...prev, response.id])
+              }
+              sx={{
+                border: '2px solid',
+                borderColor: 'success.main',
+                '& .MuiAlert-message': { width: '100%' },
+              }}
+            >
+              <Box
+                sx={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'flex-start',
+                  flexWrap: 'wrap',
+                  gap: 1,
+                }}
+              >
+                <Box sx={{ flex: 1 }}>
+                  <Typography variant="subtitle1" sx={{ fontWeight: 'bold' }}>
+                    📨 Response from Dispatch
+                  </Typography>
+                  <Typography variant="body2" sx={{ mt: 0.5 }}>
+                    {response.adminResponse}
+                  </Typography>
+                  <Typography
+                    variant="caption"
+                    color="text.secondary"
+                    sx={{ display: 'block', mt: 1 }}
+                  >
+                    Responded: {new Date(response.respondedAt).toLocaleString()}
+                  </Typography>
+                </Box>
+              </Box>
+            </Alert>
+          </Grid>
+        ))}
+
         {/* Header */}
         <Grid size={{ xs: 12 }}>
           <Paper sx={{ p: 3, bgcolor: 'primary.main', color: 'white' }}>
@@ -569,6 +776,17 @@ export const DriverPortal: React.FC = () => {
                               variant="outlined"
                             />
                           )}
+                          {stop.reportComments &&
+                            stop.reportComments.length > 0 && (
+                              <Chip
+                                icon={<ChatBubbleOutlineOutlined />}
+                                label={`${stop.reportComments.length}`}
+                                size="small"
+                                color="primary"
+                                variant="outlined"
+                                sx={{ height: 20 }}
+                              />
+                            )}
                         </Box>
                       }
                       secondary={
@@ -581,7 +799,7 @@ export const DriverPortal: React.FC = () => {
                         </Typography>
                       }
                     />
-                    {stop.status === 'pending' && (
+                    {stop.status === 'pending' && !stop.isComplaintStop && (
                       <Button
                         variant="contained"
                         size="small"
@@ -636,6 +854,176 @@ export const DriverPortal: React.FC = () => {
                           : 'error'
                       }
                     />
+
+                    {/* Admin Comments for Complaint Stops */}
+                    {selectedStop.isComplaintStop &&
+                      selectedStop.reportComments &&
+                      selectedStop.reportComments.length > 0 && (
+                        <>
+                          <Divider sx={{ my: 2 }} />
+                          <Box
+                            sx={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: 1,
+                              mb: 1,
+                            }}
+                          >
+                            <ChatBubbleOutlineOutlined
+                              color="primary"
+                              fontSize="small"
+                            />
+                            <Typography
+                              variant="subtitle2"
+                              color="primary"
+                              sx={{ fontWeight: 600 }}
+                            >
+                              Admin Comments (
+                              {selectedStop.reportComments.length})
+                            </Typography>
+                          </Box>
+
+                          <Box
+                            sx={{
+                              bgcolor: 'primary.50',
+                              borderLeft: '3px solid',
+                              borderColor: 'primary.main',
+                              borderRadius: 1,
+                              p: 2,
+                              mb: 2,
+                            }}
+                          >
+                            {selectedStop.reportComments.map(
+                              (comment: ReportCommentSummary) => (
+                                <Box
+                                  key={comment.id}
+                                  sx={{
+                                    mb: 1.5,
+                                    '&:last-child': { mb: 0 },
+                                  }}
+                                >
+                                  <Box
+                                    sx={{
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      gap: 1,
+                                      mb: 0.5,
+                                    }}
+                                  >
+                                    <Avatar
+                                      sx={{
+                                        width: 24,
+                                        height: 24,
+                                        bgcolor: 'primary.main',
+                                        fontSize: '0.75rem',
+                                      }}
+                                    >
+                                      {comment.authorName
+                                        .charAt(0)
+                                        .toUpperCase()}
+                                    </Avatar>
+                                    <Typography
+                                      variant="caption"
+                                      sx={{ fontWeight: 600 }}
+                                    >
+                                      {comment.authorName}
+                                    </Typography>
+                                    <Chip
+                                      label={comment.authorRole.toUpperCase()}
+                                      size="small"
+                                      color="primary"
+                                      variant="outlined"
+                                      sx={{ height: 18, fontSize: '0.65rem' }}
+                                    />
+                                  </Box>
+                                  <Typography
+                                    variant="body2"
+                                    sx={{ ml: 4, color: 'text.primary' }}
+                                  >
+                                    {comment.content}
+                                  </Typography>
+                                  <Typography
+                                    variant="caption"
+                                    color="text.secondary"
+                                    sx={{ ml: 4, display: 'block', mt: 0.25 }}
+                                  >
+                                    {new Date(
+                                      comment.createdAt
+                                    ).toLocaleString()}
+                                  </Typography>
+                                </Box>
+                              )
+                            )}
+                          </Box>
+                        </>
+                      )}
+
+                    {/* Report Photos */}
+                    {selectedStop.isComplaintStop &&
+                      selectedStop.reportPhotos &&
+                      selectedStop.reportPhotos.length > 0 && (
+                        <>
+                          <Divider sx={{ my: 2 }} />
+                          <Box
+                            sx={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: 1,
+                              mb: 1,
+                            }}
+                          >
+                            <PhotoCamera color="primary" fontSize="small" />
+                            <Typography
+                              variant="subtitle2"
+                              color="primary"
+                              sx={{ fontWeight: 600 }}
+                            >
+                              Report Photos ({selectedStop.reportPhotos.length})
+                            </Typography>
+                          </Box>
+
+                          <Typography
+                            variant="caption"
+                            color="text.secondary"
+                            sx={{ display: 'block', mb: 1 }}
+                          >
+                            Photos submitted by the citizen — click to enlarge
+                          </Typography>
+
+                          <ImageList
+                            cols={3}
+                            rowHeight={100}
+                            sx={{ mt: 1, mb: 2 }}
+                          >
+                            {selectedStop.reportPhotos.map((photo, idx) => (
+                              <ImageListItem
+                                key={idx}
+                                onClick={() => setPreviewPhoto(photo)}
+                                sx={{
+                                  cursor: 'pointer',
+                                  transition: 'transform 0.2s',
+                                  '&:hover': {
+                                    transform: 'scale(1.05)',
+                                    boxShadow: 3,
+                                  },
+                                }}
+                              >
+                                <img
+                                  src={photo}
+                                  alt={`Report photo ${idx + 1}`}
+                                  loading="lazy"
+                                  style={{
+                                    borderRadius: 8,
+                                    objectFit: 'cover',
+                                    width: '100%',
+                                    height: '100%',
+                                  }}
+                                />
+                              </ImageListItem>
+                            ))}
+                          </ImageList>
+                        </>
+                      )}
 
                     {selectedStop.isComplaintStop && (
                       <Alert
@@ -1009,8 +1397,8 @@ export const DriverPortal: React.FC = () => {
         </DialogTitle>
         <DialogContent sx={{ pt: 3 }}>
           <Alert severity="warning" sx={{ mb: 3 }}>
-            This will immediately notify dispatch and the administrator. Only
-            use in genuine emergencies.
+            This will immediately notify dispatch. Your truck's current GPS
+            location will be shared automatically.
           </Alert>
 
           <FormControl fullWidth sx={{ mb: 2 }}>
@@ -1036,7 +1424,89 @@ export const DriverPortal: React.FC = () => {
             value={emergencyDescription}
             onChange={(e) => setEmergencyDescription(e.target.value)}
             placeholder="Describe the situation briefly..."
+            sx={{ mb: 2 }}
           />
+
+          <Paper
+            variant="outlined"
+            sx={{
+              p: 2,
+              bgcolor: locationError ? 'warning.50' : 'success.50',
+              borderColor: locationError ? 'warning.main' : 'success.main',
+            }}
+          >
+            <Box
+              sx={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 1,
+                mb: 1,
+              }}
+            >
+              <MyLocationIcon
+                color={locationError ? 'warning' : 'success'}
+                fontSize="small"
+              />
+              <Typography
+                variant="subtitle2"
+                sx={{ fontWeight: 600 }}
+                color={locationError ? 'warning.main' : 'success.main'}
+              >
+                Truck GPS Location
+              </Typography>
+              {locationFetching && (
+                <CircularProgress size={14} sx={{ ml: 'auto' }} />
+              )}
+            </Box>
+
+            {locationFetching ? (
+              <Typography variant="caption" color="text.secondary">
+                Getting precise GPS position...
+              </Typography>
+            ) : emergencyLocation ? (
+              <>
+                <Typography
+                  variant="body2"
+                  sx={{ fontFamily: 'monospace', fontWeight: 600 }}
+                >
+                  📍 {emergencyLocation.latitude.toFixed(6)},{' '}
+                  {emergencyLocation.longitude.toFixed(6)}
+                </Typography>
+                <Typography
+                  variant="caption"
+                  color="text.secondary"
+                  sx={{ display: 'block', mt: 0.5 }}
+                >
+                  Accuracy: ±{Math.round(emergencyLocation.accuracy || 0)}m
+                </Typography>
+                <Button
+                  size="small"
+                  startIcon={<Refresh />}
+                  onClick={fetchEmergencyLocation}
+                  disabled={locationFetching}
+                  sx={{ mt: 1 }}
+                >
+                  Refresh Location
+                </Button>
+              </>
+            ) : (
+              <>
+                <Typography variant="caption" color="warning.main">
+                  {locationError ||
+                    'Could not get GPS. Will use last known route stop.'}
+                </Typography>
+                <Button
+                  size="small"
+                  startIcon={<Refresh />}
+                  onClick={fetchEmergencyLocation}
+                  disabled={locationFetching}
+                  sx={{ mt: 1, display: 'block' }}
+                >
+                  Retry GPS
+                </Button>
+              </>
+            )}
+          </Paper>
         </DialogContent>
         <DialogActions sx={{ p: 2 }}>
           <Button
@@ -1049,7 +1519,7 @@ export const DriverPortal: React.FC = () => {
             variant="contained"
             color="error"
             onClick={handleSendEmergency}
-            disabled={emergencySubmitting}
+            disabled={emergencySubmitting || locationFetching}
             startIcon={
               emergencySubmitting ? (
                 <CircularProgress size={20} color="inherit" />
@@ -1061,6 +1531,60 @@ export const DriverPortal: React.FC = () => {
             {emergencySubmitting ? 'Sending...' : 'Send Emergency Alert'}
           </Button>
         </DialogActions>
+      </Dialog>
+
+      {/* Photo Preview Dialog */}
+      <Dialog
+        open={!!previewPhoto}
+        onClose={() => setPreviewPhoto(null)}
+        maxWidth="lg"
+        fullWidth
+        slotProps={{
+          paper: {
+            sx: {
+              bgcolor: 'rgba(0,0,0,0.95)',
+              backgroundImage: 'none',
+            },
+          },
+        }}
+      >
+        <DialogTitle
+          sx={{
+            color: 'white',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+          }}
+        >
+          Report Photo
+          <IconButton
+            onClick={() => setPreviewPhoto(null)}
+            sx={{ color: 'white' }}
+          >
+            <CloseIcon />
+          </IconButton>
+        </DialogTitle>
+        <DialogContent
+          sx={{
+            display: 'flex',
+            justifyContent: 'center',
+            alignItems: 'center',
+            p: 2,
+          }}
+        >
+          {previewPhoto && (
+            <img
+              src={previewPhoto}
+              alt="Enlarged preview"
+              style={{
+                maxWidth: '100%',
+                maxHeight: '80vh',
+                objectFit: 'contain',
+                borderRadius: 4,
+              }}
+            />
+          )}
+        </DialogContent>
       </Dialog>
 
       {/* Emergency FAB */}

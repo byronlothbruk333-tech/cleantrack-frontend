@@ -21,6 +21,11 @@ import {
   Link,
   ImageList,
   ImageListItem,
+  List,
+  ListItem,
+  ListItemAvatar,
+  ListItemText,
+  Avatar,
 } from '@mui/material';
 import {
   CheckCircle,
@@ -34,12 +39,15 @@ import {
   CalendarToday,
   Info,
   PhotoCamera,
+  ChatBubbleOutlineOutlined,
+  VerifiedUser,
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import {
   reportService,
   type Report,
   type ReportStats,
+  type AdminComment,
 } from '../../Services/reportService';
 
 // ============================================
@@ -53,6 +61,9 @@ export const ReportTracking: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [selectedReport, setSelectedReport] = useState<Report | null>(null);
+
+  // ✅ Photo preview state
+  const [previewPhoto, setPreviewPhoto] = useState<string | null>(null);
 
   // ============================================
   // INITIAL LOAD
@@ -100,7 +111,7 @@ export const ReportTracking: React.FC = () => {
   }, []);
 
   // ============================================
-  // REFRESH (for button)
+  // REFRESH
   // ============================================
   const fetchData = async () => {
     setLoading(true);
@@ -380,6 +391,44 @@ export const ReportTracking: React.FC = () => {
                             size="small"
                             variant="outlined"
                           />
+
+                          {/* Feature 1: Response badge */}
+                          {report.adminResponse && (
+                            <Chip
+                              icon={<CheckCircle />}
+                              label="Admin responded"
+                              color="success"
+                              size="small"
+                              variant="outlined"
+                            />
+                          )}
+
+                          {/* Feature 2 badge: public comments */}
+                          {report.adminComments &&
+                            report.adminComments.length > 0 && (
+                              <Chip
+                                icon={<ChatBubbleOutlineOutlined />}
+                                label={`${report.adminComments.length} comment${
+                                  report.adminComments.length > 1 ? 's' : ''
+                                }`}
+                                color="primary"
+                                size="small"
+                                variant="outlined"
+                              />
+                            )}
+
+                          {/* ✅ Feature 4: Completion Proof badge */}
+                          {report.completionProof &&
+                            (report.completionProof.beforePhoto ||
+                              report.completionProof.afterPhoto) && (
+                              <Chip
+                                icon={<VerifiedUser />}
+                                label="Completion Proof"
+                                color="success"
+                                size="small"
+                                variant="outlined"
+                              />
+                            )}
                         </Box>
                       </Box>
                       <Typography variant="caption" color="text.secondary">
@@ -437,7 +486,9 @@ export const ReportTracking: React.FC = () => {
         </>
       )}
 
-      {/* Details Dialog */}
+      {/* ============================================
+          DETAILS DIALOG
+      ============================================ */}
       <Dialog
         open={!!selectedReport}
         onClose={() => setSelectedReport(null)}
@@ -558,7 +609,263 @@ export const ReportTracking: React.FC = () => {
                 {selectedReport.description}
               </Typography>
 
-              {/* Photos */}
+              {/* Feature 1: Admin Response Section */}
+              {selectedReport.adminResponse && (
+                <>
+                  <Divider sx={{ my: 2 }} />
+                  <Box
+                    sx={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 1,
+                      mb: 2,
+                    }}
+                  >
+                    <CheckCircle color="primary" />
+                    <Typography variant="h6" color="primary">
+                      Response from Admin
+                    </Typography>
+                  </Box>
+
+                  <Alert
+                    severity="info"
+                    icon={<ChatBubbleOutlineOutlined />}
+                    sx={{
+                      borderLeft: '4px solid',
+                      borderColor: 'primary.main',
+                      '& .MuiAlert-message': { width: '100%' },
+                    }}
+                  >
+                    <Typography variant="body2" sx={{ color: 'text.primary' }}>
+                      {selectedReport.adminResponse}
+                    </Typography>
+                    {selectedReport.adminRespondedAt && (
+                      <Typography
+                        variant="caption"
+                        color="text.secondary"
+                        sx={{ display: 'block', mt: 1 }}
+                      >
+                        Responded:{' '}
+                        {new Date(
+                          selectedReport.adminRespondedAt
+                        ).toLocaleString()}
+                      </Typography>
+                    )}
+                  </Alert>
+                </>
+              )}
+
+              {/* ✅ FEATURE 4: Completion Proof Section */}
+              {selectedReport.completionProof &&
+                (selectedReport.completionProof.beforePhoto ||
+                  selectedReport.completionProof.afterPhoto) && (
+                  <>
+                    <Divider sx={{ my: 2 }} />
+                    <Box
+                      sx={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 1,
+                        mb: 2,
+                      }}
+                    >
+                      <VerifiedUser color="success" />
+                      <Typography variant="h6" color="success.main">
+                        Completion Proof
+                      </Typography>
+                      <Chip
+                        label="VERIFIED"
+                        size="small"
+                        color="success"
+                        variant="outlined"
+                      />
+                    </Box>
+
+                    <Alert severity="success" sx={{ mb: 2 }}>
+                      Our team has attended to your report. Below are the
+                      before and after photos as proof of completion.
+                    </Alert>
+
+                    <Grid container spacing={2}>
+                      {selectedReport.completionProof.beforePhoto && (
+                        <Grid size={{ xs: 12, sm: 6 }}>
+                          <Typography
+                            variant="caption"
+                            color="text.secondary"
+                            sx={{ fontWeight: 600 }}
+                          >
+                            📷 BEFORE
+                          </Typography>
+                          <Box
+                            component="img"
+                            src={selectedReport.completionProof.beforePhoto}
+                            alt="Before completion"
+                            loading="lazy"
+                            onClick={() =>
+                              setPreviewPhoto(
+                                selectedReport.completionProof!.beforePhoto
+                              )
+                            }
+                            sx={{
+                              width: '100%',
+                              height: 200,
+                              objectFit: 'cover',
+                              borderRadius: 2,
+                              mt: 0.5,
+                              border: '2px solid',
+                              borderColor: 'warning.light',
+                              cursor: 'pointer',
+                              transition: 'transform 0.2s',
+                              '&:hover': { transform: 'scale(1.02)' },
+                            }}
+                          />
+                        </Grid>
+                      )}
+
+                      {selectedReport.completionProof.afterPhoto && (
+                        <Grid size={{ xs: 12, sm: 6 }}>
+                          <Typography
+                            variant="caption"
+                            color="text.secondary"
+                            sx={{ fontWeight: 600 }}
+                          >
+                            ✅ AFTER
+                          </Typography>
+                          <Box
+                            component="img"
+                            src={selectedReport.completionProof.afterPhoto}
+                            alt="After completion"
+                            loading="lazy"
+                            onClick={() =>
+                              setPreviewPhoto(
+                                selectedReport.completionProof!.afterPhoto
+                              )
+                            }
+                            sx={{
+                              width: '100%',
+                              height: 200,
+                              objectFit: 'cover',
+                              borderRadius: 2,
+                              mt: 0.5,
+                              border: '2px solid',
+                              borderColor: 'success.light',
+                              cursor: 'pointer',
+                              transition: 'transform 0.2s',
+                              '&:hover': { transform: 'scale(1.02)' },
+                            }}
+                          />
+                        </Grid>
+                      )}
+                    </Grid>
+
+                    {selectedReport.completionProof.completedAt && (
+                      <Typography
+                        variant="caption"
+                        color="text.secondary"
+                        sx={{ display: 'block', mt: 1.5 }}
+                      >
+                        Completed:{' '}
+                        {formatDateTime(
+                          selectedReport.completionProof.completedAt
+                        )}
+                      </Typography>
+                    )}
+                  </>
+                )}
+
+              {/* Admin Comments Section */}
+              {selectedReport.adminComments &&
+                selectedReport.adminComments.length > 0 && (
+                  <>
+                    <Divider sx={{ my: 2 }} />
+                    <Box
+                      sx={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 1,
+                        mb: 2,
+                      }}
+                    >
+                      <ChatBubbleOutlineOutlined color="primary" />
+                      <Typography variant="h6" color="primary">
+                        Admin Comments ({selectedReport.adminComments.length})
+                      </Typography>
+                    </Box>
+
+                    <List sx={{ p: 0 }}>
+                      {selectedReport.adminComments.map(
+                        (comment: AdminComment) => (
+                          <ListItem
+                            key={comment.id}
+                            alignItems="flex-start"
+                            sx={{
+                              bgcolor: 'primary.50',
+                              borderLeft: '3px solid',
+                              borderColor: 'primary.main',
+                              borderRadius: 1,
+                              mb: 1,
+                              p: 2,
+                            }}
+                          >
+                            <ListItemAvatar>
+                              <Avatar
+                                sx={{
+                                  bgcolor: 'primary.main',
+                                  width: 36,
+                                  height: 36,
+                                }}
+                              >
+                                {comment.authorName.charAt(0).toUpperCase()}
+                              </Avatar>
+                            </ListItemAvatar>
+                            <ListItemText
+                              primary={
+                                <Box
+                                  sx={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: 1,
+                                    flexWrap: 'wrap',
+                                  }}
+                                >
+                                  <Typography variant="subtitle2">
+                                    {comment.authorName}
+                                  </Typography>
+                                  <Chip
+                                    label={comment.authorRole.toUpperCase()}
+                                    size="small"
+                                    color="primary"
+                                    variant="outlined"
+                                    sx={{ height: 20 }}
+                                  />
+                                </Box>
+                              }
+                              secondary={
+                                <>
+                                  <Typography
+                                    variant="body2"
+                                    sx={{ mt: 0.5, color: 'text.primary' }}
+                                  >
+                                    {comment.content}
+                                  </Typography>
+                                  <Typography
+                                    variant="caption"
+                                    color="text.secondary"
+                                    sx={{ display: 'block', mt: 0.5 }}
+                                  >
+                                    {formatDateTime(comment.createdAt)}
+                                  </Typography>
+                                </>
+                              }
+                            />
+                          </ListItem>
+                        )
+                      )}
+                    </List>
+                  </>
+                )}
+
+              {/* Original Photos */}
               {selectedReport.photos && selectedReport.photos.length > 0 && (
                 <>
                   <Divider sx={{ my: 2 }} />
@@ -567,11 +874,15 @@ export const ReportTracking: React.FC = () => {
                     color="text.secondary"
                     gutterBottom
                   >
-                    Photos ({selectedReport.photos.length})
+                    Your Original Photos ({selectedReport.photos.length})
                   </Typography>
                   <ImageList cols={3} rowHeight={160} sx={{ mt: 1 }}>
                     {selectedReport.photos.map((photo, index) => (
-                      <ImageListItem key={index}>
+                      <ImageListItem
+                        key={index}
+                        onClick={() => setPreviewPhoto(photo)}
+                        sx={{ cursor: 'pointer' }}
+                      >
                         <img
                           src={photo}
                           alt={`Photo ${index + 1}`}
@@ -629,6 +940,60 @@ export const ReportTracking: React.FC = () => {
             </DialogActions>
           </>
         )}
+      </Dialog>
+
+      {/* ✅ Photo Preview Dialog */}
+      <Dialog
+        open={!!previewPhoto}
+        onClose={() => setPreviewPhoto(null)}
+        maxWidth="lg"
+        fullWidth
+        slotProps={{
+          paper: {
+            sx: {
+              bgcolor: 'rgba(0,0,0,0.95)',
+              backgroundImage: 'none',
+            },
+          },
+        }}
+      >
+        <DialogTitle
+          sx={{
+            color: 'white',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+          }}
+        >
+          Photo Preview
+          <IconButton
+            onClick={() => setPreviewPhoto(null)}
+            sx={{ color: 'white' }}
+          >
+            <CloseIcon />
+          </IconButton>
+        </DialogTitle>
+        <DialogContent
+          sx={{
+            display: 'flex',
+            justifyContent: 'center',
+            alignItems: 'center',
+            p: 2,
+          }}
+        >
+          {previewPhoto && (
+            <img
+              src={previewPhoto}
+              alt="Enlarged preview"
+              style={{
+                maxWidth: '100%',
+                maxHeight: '80vh',
+                objectFit: 'contain',
+                borderRadius: 4,
+              }}
+            />
+          )}
+        </DialogContent>
       </Dialog>
     </Container>
   );

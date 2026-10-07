@@ -33,6 +33,7 @@ export interface FleetTruck {
   driverName: string;
   zone: string;
   status: string;
+  truckType?: 'collection' | 'response-unit'; // ✅ NEW
   completion: number;
   capacity: number;
   workingDays?: string[];

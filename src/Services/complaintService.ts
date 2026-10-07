@@ -13,13 +13,20 @@ export type ReportStatus = 'pending' | 'in-progress' | 'resolved' | 'rejected';
 
 export type Priority = 'low' | 'medium' | 'high' | 'critical';
 
+// ✅ IMPROVEMENT 4: Completion proof type
+export interface CompletionProof {
+  beforePhoto: string | null;
+  afterPhoto: string | null;
+  completedAt: string | null;
+}
+
 export interface Complaint {
   id: string;
   citizenId: string;
-  issueType: IssueType;
+  issueType: string;
   description: string;
   address: string;
-  zone?: string | null; // ADDED
+  zone?: string | null;
   latitude?: number | null;
   longitude?: number | null;
   photos: string[];
@@ -38,6 +45,12 @@ export interface Complaint {
     email: string;
     phone?: string | null;
   };
+  // ✅ Feature 1: Admin response to FAB alert / report
+  adminResponse?: string | null;
+  adminRespondedAt?: string | null;
+  adminRespondedBy?: string | null;
+  // ✅ IMPROVEMENT 4: Driver completion proof
+  completionProof?: CompletionProof | null;
 }
 
 export interface Comment {
@@ -60,6 +73,17 @@ export interface Comment {
 // COMPLAINT SERVICE
 // ============================================
 export const complaintService = {
+  // ----------------------------------------
+  // RESPOND TO REPORT (admin)
+  // ----------------------------------------
+  respondToReport: async (
+    id: string,
+    response: string
+  ): Promise<{ message: string; report: Complaint }> => {
+    const res = await api.post(`/reports/${id}/respond`, { response });
+    return res.data;
+  },
+
   // ----------------------------------------
   // GET COMPLAINT BY ID
   // ----------------------------------------
