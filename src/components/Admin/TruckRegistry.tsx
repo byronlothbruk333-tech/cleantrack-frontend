@@ -81,6 +81,17 @@ const INITIAL_FORM: TruckFormData = {
 };
 
 // ============================================
+// HELPER: Detect response units
+// `truckType` may exist on the runtime object even though it isn't
+// declared on the `Truck` interface yet. Read it defensively.
+// ============================================
+type TruckWithType = Truck & { truckType?: string };
+
+const isResponseUnit = (truck: Truck): boolean => {
+  return (truck as TruckWithType).truckType === 'response-unit';
+};
+
+// ============================================
 // COMPONENT
 // ============================================
 export const TruckRegistry: React.FC = () => {
@@ -226,7 +237,7 @@ export const TruckRegistry: React.FC = () => {
     }
   };
 
-  // ✅ FIXED: Read driver from nested object with fallback
+  // ✅ Read driver from nested object with fallback
   const getDriverName = (truck: Truck): string => {
     return truck.driver?.name || truck.driverName || 'Unassigned';
   };
@@ -601,110 +612,149 @@ export const TruckRegistry: React.FC = () => {
                       </TableCell>
                     </TableRow>
                   ) : (
-                    filteredTrucks.map((truck) => (
-                      <TableRow key={truck.id} hover>
-                        <TableCell>
-                          <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                            {truck.truckId}
-                          </Typography>
-                        </TableCell>
-                        <TableCell>{truck.registrationNumber}</TableCell>
-                        <TableCell>
-                          <Box
-                            sx={{
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: 1,
-                            }}
-                          >
-                            <Avatar
+                    filteredTrucks.map((truck) => {
+                      const responseUnit = isResponseUnit(truck);
+
+                      return (
+                        <TableRow key={truck.id} hover>
+                          <TableCell>
+                            <Typography
+                              variant="body2"
+                              sx={{ fontWeight: 600 }}
+                            >
+                              {truck.truckId}
+                            </Typography>
+                          </TableCell>
+                          <TableCell>{truck.registrationNumber}</TableCell>
+                          <TableCell>
+                            <Box
                               sx={{
-                                width: 28,
-                                height: 28,
-                                bgcolor: truck.driverId
-                                  ? 'primary.main'
-                                  : 'grey.400',
-                                fontSize: 14,
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: 1,
                               }}
                             >
-                              {/* ✅ FIXED: Read from nested driver object */}
-                              {getDriverName(truck).charAt(0).toUpperCase()}
-                            </Avatar>
-                            <Typography variant="body2">
-                              {/* ✅ FIXED: Read from nested driver object */}
-                              {getDriverName(truck)}
-                            </Typography>
-                          </Box>
-                        </TableCell>
-                        <TableCell>{truck.zone}</TableCell>
-                        <TableCell>
-                          <Chip
-                            icon={getStatusIcon(truck.status)}
-                            label={truck.status.toUpperCase().replace('-', ' ')}
-                            color={getStatusColor(truck.status)}
-                            size="small"
-                          />
-                        </TableCell>
-                        <TableCell>{truck.capacity} units</TableCell>
-                        <TableCell>
-                          <Box
-                            sx={{
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: 1,
-                              minWidth: 120,
-                            }}
-                          >
-                            <LinearProgress
-                              variant="determinate"
-                              value={truck.completion}
-                              sx={{ flex: 1, height: 6, borderRadius: 3 }}
-                              color={
-                                truck.completion >= 80
-                                  ? 'success'
-                                  : truck.completion >= 50
-                                  ? 'warning'
-                                  : 'error'
-                              }
+                              <Avatar
+                                sx={{
+                                  width: 28,
+                                  height: 28,
+                                  bgcolor: truck.driverId
+                                    ? 'primary.main'
+                                    : 'grey.400',
+                                  fontSize: 14,
+                                }}
+                              >
+                                {getDriverName(truck)
+                                  .charAt(0)
+                                  .toUpperCase()}
+                              </Avatar>
+                              <Typography variant="body2">
+                                {getDriverName(truck)}
+                              </Typography>
+                            </Box>
+                          </TableCell>
+
+                          {/* ✅ Zone — hidden for response units */}
+                          <TableCell>
+                            {responseUnit ? (
+                              <Typography
+                                variant="body2"
+                                color="text.disabled"
+                              >
+                                —
+                              </Typography>
+                            ) : (
+                              truck.zone
+                            )}
+                          </TableCell>
+
+                          <TableCell>
+                            <Chip
+                              icon={getStatusIcon(truck.status)}
+                              label={truck.status
+                                .toUpperCase()
+                                .replace('-', ' ')}
+                              color={getStatusColor(truck.status)}
+                              size="small"
                             />
-                            <Typography variant="caption">
-                              {truck.completion}%
-                            </Typography>
-                          </Box>
-                        </TableCell>
-                        <TableCell align="right">
-                          <Tooltip title="View Route">
-                            <IconButton
-                              size="small"
-                              color="primary"
-                              onClick={() =>
-                                navigate(`/admin/route/${truck.truckId}`)
-                              }
-                            >
-                              <Visibility fontSize="small" />
-                            </IconButton>
-                          </Tooltip>
-                          <Tooltip title="Edit">
-                            <IconButton
-                              size="small"
-                              color="info"
-                              onClick={() => handleOpenEditDialog(truck)}
-                            >
-                              <EditIcon fontSize="small" />
-                            </IconButton>
-                          </Tooltip>
-                          <Tooltip title="Delete">
-                            <IconButton
-                              size="small"
-                              color="error"
-                              onClick={() => handleOpenDeleteDialog(truck)}
-                            >
-                              <DeleteIcon fontSize="small" />
-                            </IconButton>
-                          </Tooltip>
-                        </TableCell>
-                      </TableRow>
-                    ))
+                          </TableCell>
+                          <TableCell>{truck.capacity} units</TableCell>
+
+                          {/* ✅ Completion — hidden for response units */}
+                          <TableCell>
+                            {responseUnit ? (
+                              <Typography
+                                variant="body2"
+                                color="text.disabled"
+                              >
+                                —
+                              </Typography>
+                            ) : (
+                              <Box
+                                sx={{
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: 1,
+                                  minWidth: 120,
+                                }}
+                              >
+                                <LinearProgress
+                                  variant="determinate"
+                                  value={truck.completion}
+                                  sx={{
+                                    flex: 1,
+                                    height: 6,
+                                    borderRadius: 3,
+                                  }}
+                                  color={
+                                    truck.completion >= 80
+                                      ? 'success'
+                                      : truck.completion >= 50
+                                      ? 'warning'
+                                      : 'error'
+                                  }
+                                />
+                                <Typography variant="caption">
+                                  {truck.completion}%
+                                </Typography>
+                              </Box>
+                            )}
+                          </TableCell>
+
+                          <TableCell align="right">
+                            <Tooltip title="View Route">
+                              <IconButton
+                                size="small"
+                                color="primary"
+                                onClick={() =>
+                                  navigate(`/admin/route/${truck.truckId}`)
+                                }
+                              >
+                                <Visibility fontSize="small" />
+                              </IconButton>
+                            </Tooltip>
+                            <Tooltip title="Edit">
+                              <IconButton
+                                size="small"
+                                color="info"
+                                onClick={() => handleOpenEditDialog(truck)}
+                              >
+                                <EditIcon fontSize="small" />
+                              </IconButton>
+                            </Tooltip>
+                            <Tooltip title="Delete">
+                              <IconButton
+                                size="small"
+                                color="error"
+                                onClick={() => handleOpenDeleteDialog(truck)}
+                              >
+                                <DeleteIcon fontSize="small" />
+                              </IconButton>
+                            </Tooltip>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })
                   )}
                 </TableBody>
               </Table>
@@ -757,7 +807,9 @@ export const TruckRegistry: React.FC = () => {
                 <InputLabel>Assigned Driver</InputLabel>
                 <Select
                   value={formData.driverId}
-                  onChange={(e) => handleInputChange('driverId', e.target.value)}
+                  onChange={(e) =>
+                    handleInputChange('driverId', e.target.value)
+                  }
                   label="Assigned Driver"
                 >
                   <MenuItem value="">Unassigned</MenuItem>
