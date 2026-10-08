@@ -11,15 +11,6 @@ import {
   Container,
   useTheme,
   Divider,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
-  Button,
-  FormControlLabel,
-  Switch,
-  Snackbar,
-  Alert,
   ListItemIcon,
   ListItemText,
 } from '@mui/material';
@@ -29,7 +20,6 @@ import {
   ExitToApp,
   Map,
   LocalShipping,
-  Settings,
 } from '@mui/icons-material';
 import { useAuth } from '../../Context/AuthContext';
 import { useNavigate } from 'react-router-dom';
@@ -45,24 +35,6 @@ export const AdminNavbar: React.FC<AdminNavbarProps> = ({ title = 'CleanTrack' }
 
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const [mobileAnchorEl, setMobileAnchorEl] = useState<null | HTMLElement>(null);
-
-  // Notification settings dialog
-  const [notifSettingsOpen, setNotifSettingsOpen] = useState(false);
-
-  // Notification preferences (persisted in localStorage)
-  const [emailAlerts, setEmailAlerts] = useState(
-    localStorage.getItem('admin_email_alerts') !== 'false'
-  );
-  const [emergencyAlerts, setEmergencyAlerts] = useState(
-    localStorage.getItem('admin_emergency_alerts') !== 'false'
-  );
-  const [weeklyReports, setWeeklyReports] = useState(
-    localStorage.getItem('admin_weekly_reports') === 'true'
-  );
-
-  // Snackbar
-  const [snackbarOpen, setSnackbarOpen] = useState(false);
-  const [snackbarMessage, setSnackbarMessage] = useState('');
 
   // ============================================
   // HANDLERS
@@ -87,25 +59,6 @@ export const AdminNavbar: React.FC<AdminNavbarProps> = ({ title = 'CleanTrack' }
     logout();
     navigate('/login');
     handleMenuClose();
-  };
-
-  const handleOpenNotifSettings = () => {
-    setNotifSettingsOpen(true);
-    handleMenuClose();
-  };
-
-  const handleCloseNotifSettings = () => {
-    setNotifSettingsOpen(false);
-  };
-
-  const handleSaveNotifSettings = () => {
-    localStorage.setItem('admin_email_alerts', String(emailAlerts));
-    localStorage.setItem('admin_emergency_alerts', String(emergencyAlerts));
-    localStorage.setItem('admin_weekly_reports', String(weeklyReports));
-
-    setSnackbarMessage('Notification preferences saved');
-    setSnackbarOpen(true);
-    setNotifSettingsOpen(false);
   };
 
   const getRoleLabel = (role: string) => {
@@ -198,15 +151,6 @@ export const AdminNavbar: React.FC<AdminNavbarProps> = ({ title = 'CleanTrack' }
 
               <Divider />
 
-              <MenuItem onClick={handleOpenNotifSettings} sx={{ py: 1.5 }}>
-                <ListItemIcon>
-                  <Settings fontSize="small" />
-                </ListItemIcon>
-                <ListItemText>Notification Settings</ListItemText>
-              </MenuItem>
-
-              <Divider />
-
               <MenuItem
                 onClick={handleLogout}
                 sx={{ color: 'error.main', py: 1.5 }}
@@ -260,78 +204,6 @@ export const AdminNavbar: React.FC<AdminNavbarProps> = ({ title = 'CleanTrack' }
           </Box>
         </Toolbar>
       </Container>
-
-      {/* Notification Settings Dialog */}
-      <Dialog
-        open={notifSettingsOpen}
-        onClose={handleCloseNotifSettings}
-        maxWidth="sm"
-        fullWidth
-      >
-        <DialogTitle>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            <Settings color="primary" />
-            <Typography variant="h6">Notification Settings</Typography>
-          </Box>
-        </DialogTitle>
-        <DialogContent dividers>
-          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-            Control how you receive system alerts and updates.
-          </Typography>
-
-          <FormControlLabel
-            control={
-              <Switch
-                checked={emailAlerts}
-                onChange={(e) => setEmailAlerts(e.target.checked)}
-              />
-            }
-            label="Email alerts (complaints, reports)"
-          />
-          <br />
-          <FormControlLabel
-            control={
-              <Switch
-                checked={emergencyAlerts}
-                onChange={(e) => setEmergencyAlerts(e.target.checked)}
-              />
-            }
-            label="Emergency dispatch alerts (urgent)"
-          />
-          <br />
-          <FormControlLabel
-            control={
-              <Switch
-                checked={weeklyReports}
-                onChange={(e) => setWeeklyReports(e.target.checked)}
-              />
-            }
-            label="Weekly performance reports"
-          />
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={handleCloseNotifSettings}>Cancel</Button>
-          <Button variant="contained" onClick={handleSaveNotifSettings}>
-            Save Preferences
-          </Button>
-        </DialogActions>
-      </Dialog>
-
-      {/* Snackbar */}
-      <Snackbar
-        open={snackbarOpen}
-        autoHideDuration={3000}
-        onClose={() => setSnackbarOpen(false)}
-        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
-      >
-        <Alert
-          onClose={() => setSnackbarOpen(false)}
-          severity="success"
-          sx={{ width: '100%' }}
-        >
-          {snackbarMessage}
-        </Alert>
-      </Snackbar>
     </AppBar>
   );
 };

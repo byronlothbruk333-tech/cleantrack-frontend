@@ -13,8 +13,6 @@ import {
   Divider,
   Alert,
   Snackbar,
-  Switch,
-  FormControlLabel,
   Paper,
   Dialog,
   DialogTitle,
@@ -36,7 +34,6 @@ import {
   Phone,
   LocationOn,
   Public as PublicIcon,
-  Notifications,
   ReportProblem,
   DeleteForever,
 } from '@mui/icons-material';
@@ -80,14 +77,6 @@ export const CitizenProfile: React.FC = () => {
     zone: user?.zone || '',
     bio: user?.bio || '',
   });
-
-  // Notification preferences
-  const [emailNotifications, setEmailNotifications] = useState(
-    user?.emailNotifications ?? true
-  );
-  const [smsNotifications, setSmsNotifications] = useState(
-    user?.smsNotifications ?? false
-  );
 
   // Report stats (real from backend)
   const [stats, setStats] = useState<ReportStats | null>(null);
@@ -179,27 +168,6 @@ export const CitizenProfile: React.FC = () => {
     setFormData({ ...formData, [field]: value });
   };
 
-  const handleNotificationChange = (
-    type: 'email' | 'sms',
-    value: boolean
-  ) => {
-    if (type === 'email') {
-      setEmailNotifications(value);
-      updateUser({ emailNotifications: value });
-      showSnackbar(
-        `Email notifications ${value ? 'enabled' : 'disabled'}`,
-        'info'
-      );
-    } else {
-      setSmsNotifications(value);
-      updateUser({ smsNotifications: value });
-      showSnackbar(
-        `SMS notifications ${value ? 'enabled' : 'disabled'}`,
-        'info'
-      );
-    }
-  };
-
   const handleDeleteAccount = () => {
     updateUser({
       deleted: true,
@@ -247,7 +215,6 @@ export const CitizenProfile: React.FC = () => {
               flexWrap: 'wrap',
             }}
           >
-            {/* ✅ FIXED: Use `|| undefined` so MUI's Avatar doesn't complain about null */}
             <Avatar
               src={user.avatar || undefined}
               sx={{
@@ -403,41 +370,6 @@ export const CitizenProfile: React.FC = () => {
                   )}
                 </Box>
               )}
-            </CardContent>
-          </Card>
-
-          {/* Notifications */}
-          <Card sx={{ mt: 3 }}>
-            <CardContent>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
-                <Notifications color="primary" />
-                <Typography variant="h6">Notification Preferences</Typography>
-              </Box>
-              <Divider sx={{ mb: 2 }} />
-
-              <FormControlLabel
-                control={
-                  <Switch
-                    checked={emailNotifications}
-                    onChange={(e) =>
-                      handleNotificationChange('email', e.target.checked)
-                    }
-                  />
-                }
-                label="Email notifications (report status updates)"
-              />
-              <br />
-              <FormControlLabel
-                control={
-                  <Switch
-                    checked={smsNotifications}
-                    onChange={(e) =>
-                      handleNotificationChange('sms', e.target.checked)
-                    }
-                  />
-                }
-                label="SMS notifications (urgent updates only)"
-              />
             </CardContent>
           </Card>
         </Grid>

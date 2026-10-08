@@ -10,9 +10,6 @@ import {
   Chip,
   Divider,
   Alert,
-  Snackbar,
-  Switch,
-  FormControlLabel,
   Paper,
   CircularProgress,
 } from '@mui/material';
@@ -22,7 +19,6 @@ import {
   Phone,
   LocationOn,
   Public as PublicIcon,
-  Notifications,
   LocalShipping,
   Route as RouteIcon,
   CheckCircle,
@@ -40,28 +36,13 @@ import { truckService, type Truck } from '../../Services/truckService';
 // COMPONENT
 // ============================================
 export const DriverProfile: React.FC = () => {
-  const { user, updateUser } = useAuth();
-
-  // Notification preferences
-  const [emailNotifications, setEmailNotifications] = useState(
-    user?.emailNotifications ?? true
-  );
-  const [smsNotifications, setSmsNotifications] = useState(
-    user?.smsNotifications ?? false
-  );
+  const { user } = useAuth();
 
   // Real data from backend
   const [route, setRoute] = useState<Route | null>(null);
   const [truck, setTruck] = useState<Truck | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-
-  // Snackbar
-  const [snackbarOpen, setSnackbarOpen] = useState(false);
-  const [snackbarMessage, setSnackbarMessage] = useState('');
-  const [snackbarSeverity, setSnackbarSeverity] = useState<
-    'success' | 'error' | 'info' | 'warning'
-  >('info');
 
   // ============================================
   // LOAD REAL DATA
@@ -121,39 +102,6 @@ export const DriverProfile: React.FC = () => {
   }, [user?.id]);
 
   // ============================================
-  // HANDLERS
-  // ============================================
-  const showSnackbar = (
-    message: string,
-    severity: typeof snackbarSeverity
-  ) => {
-    setSnackbarMessage(message);
-    setSnackbarSeverity(severity);
-    setSnackbarOpen(true);
-  };
-
-  const handleNotificationChange = (
-    type: 'email' | 'sms',
-    value: boolean
-  ) => {
-    if (type === 'email') {
-      setEmailNotifications(value);
-      updateUser({ emailNotifications: value });
-      showSnackbar(
-        `Email notifications ${value ? 'enabled' : 'disabled'}`,
-        'info'
-      );
-    } else {
-      setSmsNotifications(value);
-      updateUser({ smsNotifications: value });
-      showSnackbar(
-        `SMS notifications ${value ? 'enabled' : 'disabled'}`,
-        'info'
-      );
-    }
-  };
-
-  // ============================================
   // NOT LOGGED IN
   // ============================================
   if (!user) {
@@ -202,7 +150,6 @@ export const DriverProfile: React.FC = () => {
               flexWrap: 'wrap',
             }}
           >
-            {/* ✅ FIXED: `|| undefined` prevents MUI's null type error */}
             <Avatar
               src={user.avatar || undefined}
               sx={{
@@ -342,47 +289,6 @@ export const DriverProfile: React.FC = () => {
                   supervisor.
                 </Alert>
               )}
-            </CardContent>
-          </Card>
-
-          {/* Notification Preferences */}
-          <Card sx={{ mt: 3 }}>
-            <CardContent>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
-                <Notifications color="info" />
-                <Typography variant="h6">Notification Preferences</Typography>
-              </Box>
-              <Divider sx={{ mb: 2 }} />
-
-              <Typography variant="caption" color="text.secondary">
-                You can control how you receive route and dispatch
-                notifications.
-              </Typography>
-              <Box sx={{ mt: 2 }}>
-                <FormControlLabel
-                  control={
-                    <Switch
-                      checked={emailNotifications}
-                      onChange={(e) =>
-                        handleNotificationChange('email', e.target.checked)
-                      }
-                    />
-                  }
-                  label="Email notifications (route changes, updates)"
-                />
-                <br />
-                <FormControlLabel
-                  control={
-                    <Switch
-                      checked={smsNotifications}
-                      onChange={(e) =>
-                        handleNotificationChange('sms', e.target.checked)
-                      }
-                    />
-                  }
-                  label="SMS notifications (urgent dispatch alerts)"
-                />
-              </Box>
             </CardContent>
           </Card>
         </Grid>
@@ -528,22 +434,6 @@ export const DriverProfile: React.FC = () => {
           </Paper>
         </Grid>
       </Grid>
-
-      {/* Snackbar */}
-      <Snackbar
-        open={snackbarOpen}
-        autoHideDuration={4000}
-        onClose={() => setSnackbarOpen(false)}
-        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
-      >
-        <Alert
-          onClose={() => setSnackbarOpen(false)}
-          severity={snackbarSeverity}
-          sx={{ width: '100%' }}
-        >
-          {snackbarMessage}
-        </Alert>
-      </Snackbar>
     </Container>
   );
 };
