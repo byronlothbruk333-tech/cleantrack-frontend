@@ -28,12 +28,16 @@ api.interceptors.request.use(
 );
 
 // ============================================
-// RESPONSE INTERCEPTOR — handle 401
+// RESPONSE INTERCEPTOR — handle 401 + 429
 // ✅ FIXED: Clears the correct localStorage keys
+// ✅ FIXED: Handles 429 silently (no browser alert)
 // ============================================
 api.interceptors.response.use(
   (response) => response,
   (error) => {
+    // ----------------------------------------
+    // 401 — session expired / unauthorized
+    // ----------------------------------------
     if (error.response?.status === 401) {
       // ✅ Match the keys used in authService.ts
       localStorage.removeItem('cleantrack_access_token');
@@ -45,6 +49,20 @@ api.interceptors.response.use(
         window.location.href = '/login';
       }
     }
+
+    // ----------------------------------------
+    // 429 — rate limited
+    // ✅ Don't alert() here. Let the calling component
+    //    decide how to surface this (e.g. MUI Snackbar).
+    // ----------------------------------------
+    if (error.response?.status === 429) {
+      console.warn(
+        '[api] Rate limited (429). Please slow down — the calling component should handle this gracefully.'
+      );
+      // Intentionally no alert(). The component that made the request
+      // is responsible for showing a user-friendly message.
+    }
+
     return Promise.reject(error);
   }
 );

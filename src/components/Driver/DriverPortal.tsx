@@ -31,6 +31,7 @@ import {
   Divider,
   ImageList,
   ImageListItem,
+  Snackbar,
 } from '@mui/material';
 import {
   Route as RouteIcon,
@@ -140,6 +141,24 @@ export const DriverPortal: React.FC = () => {
       }
     }
   );
+
+  // ============================================
+  // ✅ SNACKBAR STATE (replaces browser alert())
+  // ============================================
+  const [snackbarOpen, setSnackbarOpen] = useState(false);
+  const [snackbarMessage, setSnackbarMessage] = useState('');
+  const [snackbarSeverity, setSnackbarSeverity] = useState<
+    'success' | 'error' | 'warning' | 'info'
+  >('info');
+
+  const showSnackbar = (
+    message: string,
+    severity: typeof snackbarSeverity
+  ) => {
+    setSnackbarMessage(message);
+    setSnackbarSeverity(severity);
+    setSnackbarOpen(true);
+  };
 
   // ============================================
   // LOAD TODAY'S ROUTE
@@ -355,10 +374,19 @@ export const DriverPortal: React.FC = () => {
   const handleCompleteStop = async (stop: RouteStop) => {
     if (!route) return;
 
+    // ✅ Guard: Prevent duplicate in-flight requests
+    if (actionLoading) {
+      console.log(
+        '⏳ Complete stop request already in flight, skipping duplicate...'
+      );
+      return;
+    }
+
     if (stop.isComplaintStop) {
       if (!beforePhotoFile || !afterPhotoFile) {
-        alert(
-          'Please take both "Before" and "After" photos for this complaint stop.'
+        showSnackbar(
+          'Please take both "Before" and "After" photos for this complaint stop.',
+          'warning'
         );
         return;
       }
@@ -402,15 +430,25 @@ export const DriverPortal: React.FC = () => {
       removePhoto('before');
       removePhoto('after');
       setSelectedStop(null);
+      showSnackbar('Stop completed successfully.', 'success');
     } catch (err: unknown) {
       const error = err as {
-        response?: { data?: { message?: string; error?: string } };
+        response?: { status?: number; data?: { message?: string; error?: string } };
       };
-      alert(
+      const message =
         error.response?.data?.message ||
-          error.response?.data?.error ||
-          'Failed to complete stop. Please try again.'
-      );
+        error.response?.data?.error ||
+        'Failed to complete stop. Please try again.';
+
+      // ✅ Better UX for 429 (rate limited)
+      if (error.response?.status === 429) {
+        showSnackbar(
+          'System is busy. Please wait a moment and try again.',
+          'warning'
+        );
+      } else {
+        showSnackbar(message, 'error');
+      }
     } finally {
       setActionLoading(false);
     }
@@ -428,7 +466,7 @@ export const DriverPortal: React.FC = () => {
     if (!route || !selectedStop) return;
 
     if (!skipReason.trim()) {
-      alert('Please provide a reason for skipping');
+      showSnackbar('Please provide a reason for skipping', 'warning');
       return;
     }
 
@@ -453,15 +491,24 @@ export const DriverPortal: React.FC = () => {
       setShowSkipDialog(false);
       setSkipReason('');
       setSelectedStop(null);
+      showSnackbar('Stop skipped.', 'info');
     } catch (err: unknown) {
       const error = err as {
-        response?: { data?: { message?: string; error?: string } };
+        response?: { status?: number; data?: { message?: string; error?: string } };
       };
-      alert(
+      const message =
         error.response?.data?.message ||
-          error.response?.data?.error ||
-          'Failed to skip stop. Please try again.'
-      );
+        error.response?.data?.error ||
+        'Failed to skip stop. Please try again.';
+
+      if (error.response?.status === 429) {
+        showSnackbar(
+          'System is busy. Please wait a moment and try again.',
+          'warning'
+        );
+      } else {
+        showSnackbar(message, 'error');
+      }
     } finally {
       setActionLoading(false);
     }
@@ -556,20 +603,29 @@ export const DriverPortal: React.FC = () => {
       });
 
       setOpenEmergencyDialog(false);
-      alert(
-        `🚨 Emergency alert sent to dispatch!\n\nLocation shared: ${latitude.toFixed(
+      showSnackbar(
+        `🚨 Emergency alert sent! Location: ${latitude.toFixed(
           6
-        )}, ${longitude.toFixed(6)}\nSource: ${locationSource}`
+        )}, ${longitude.toFixed(6)} (${locationSource})`,
+        'success'
       );
     } catch (err: unknown) {
       const error = err as {
-        response?: { data?: { message?: string; error?: string } };
+        response?: { status?: number; data?: { message?: string; error?: string } };
       };
-      alert(
+      const message =
         error.response?.data?.message ||
-          error.response?.data?.error ||
-          'Failed to send emergency alert. Please try calling dispatch directly.'
-      );
+        error.response?.data?.error ||
+        'Failed to send emergency alert. Please try calling dispatch directly.';
+
+      if (error.response?.status === 429) {
+        showSnackbar(
+          'System is busy. Please wait a moment and try again.',
+          'warning'
+        );
+      } else {
+        showSnackbar(message, 'error');
+      }
     } finally {
       setEmergencySubmitting(false);
     }
@@ -1722,6 +1778,22 @@ export const DriverPortal: React.FC = () => {
       >
         <Warning />
       </Fab>
+
+      {/* ✅ Global Snackbar — replaces all browser alert() calls */}
+      <Snackbar
+        open={snackbarOpen}
+        autoHideDuration={6000}
+        onClose={() => setSnackbarOpen(false)}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      >
+        <Alert
+          onClose={() => setSnackbarOpen(false)}
+          severity={snackbarSeverity}
+          sx={{ width: '100%' }}
+        >
+          {snackbarMessage}
+        </Alert>
+      </Snackbar>
     </Container>
   );
 };
