@@ -77,9 +77,17 @@ export interface Route {
   truck?: TruckInfo;
 }
 
+// ============================================
+// COMPLETE STOP RESPONSE
+// ✅ `stop` can be null when a complaint stop is
+//    removed from the route after completion.
+// ✅ `stopRemoved` signals that the stop no longer
+//    exists — the frontend should refetch the route.
+// ============================================
 export interface CompleteStopResponse {
   message: string;
-  stop: RouteStop;
+  stop: RouteStop | null;
+  stopRemoved?: boolean;
   routeProgress: {
     completedStops: number;
     totalStops: number;
