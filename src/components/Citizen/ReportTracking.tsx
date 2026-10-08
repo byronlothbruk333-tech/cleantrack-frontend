@@ -203,6 +203,15 @@ export const ReportTracking: React.FC = () => {
     return new Date(dateString).toLocaleString();
   };
 
+  // ✅ Check if a report has a proof-of-service photo to show
+  const hasProof = (report: Report) => {
+    return !!(
+      report.proofPhoto ||
+      report.completionProof?.afterPhoto ||
+      report.completionProof?.beforePhoto
+    );
+  };
+
   // ============================================
   // RENDER
   // ============================================
@@ -392,7 +401,7 @@ export const ReportTracking: React.FC = () => {
                             variant="outlined"
                           />
 
-                          {/* Feature 1: Response badge */}
+                          {/* Response badge */}
                           {report.adminResponse && (
                             <Chip
                               icon={<CheckCircle />}
@@ -403,7 +412,7 @@ export const ReportTracking: React.FC = () => {
                             />
                           )}
 
-                          {/* Feature 2 badge: public comments */}
+                          {/* Public comments badge */}
                           {report.adminComments &&
                             report.adminComments.length > 0 && (
                               <Chip
@@ -417,18 +426,16 @@ export const ReportTracking: React.FC = () => {
                               />
                             )}
 
-                          {/* ✅ Feature 4: Completion Proof badge */}
-                          {report.completionProof &&
-                            (report.completionProof.beforePhoto ||
-                              report.completionProof.afterPhoto) && (
-                              <Chip
-                                icon={<VerifiedUser />}
-                                label="Completion Proof"
-                                color="success"
-                                size="small"
-                                variant="outlined"
-                              />
-                            )}
+                          {/* ✅ Proof of Service badge */}
+                          {hasProof(report) && (
+                            <Chip
+                              icon={<VerifiedUser />}
+                              label="Proof of Service"
+                              color="success"
+                              size="small"
+                              variant="outlined"
+                            />
+                          )}
                         </Box>
                       </Box>
                       <Typography variant="caption" color="text.secondary">
@@ -609,7 +616,7 @@ export const ReportTracking: React.FC = () => {
                 {selectedReport.description}
               </Typography>
 
-              {/* Feature 1: Admin Response Section */}
+              {/* Admin Response Section */}
               {selectedReport.adminResponse && (
                 <>
                   <Divider sx={{ my: 2 }} />
@@ -655,10 +662,22 @@ export const ReportTracking: React.FC = () => {
                 </>
               )}
 
-              {/* ✅ FEATURE 4: Completion Proof Section */}
-              {selectedReport.completionProof &&
-                (selectedReport.completionProof.beforePhoto ||
-                  selectedReport.completionProof.afterPhoto) && (
+              {/* ✅ Proof of Service Section */}
+              {(() => {
+                const proofAfter =
+                  selectedReport.proofPhoto ||
+                  selectedReport.completionProof?.afterPhoto ||
+                  null;
+                const proofBefore =
+                  selectedReport.completionProof?.beforePhoto || null;
+                const proofAt =
+                  selectedReport.proofPhotoUploadedAt ||
+                  selectedReport.completionProof?.completedAt ||
+                  null;
+
+                if (!proofAfter) return null;
+
+                return (
                   <>
                     <Divider sx={{ my: 2 }} />
                     <Box
@@ -671,7 +690,7 @@ export const ReportTracking: React.FC = () => {
                     >
                       <VerifiedUser color="success" />
                       <Typography variant="h6" color="success.main">
-                        Completion Proof
+                        Proof of Service
                       </Typography>
                       <Chip
                         label="VERIFIED"
@@ -682,12 +701,12 @@ export const ReportTracking: React.FC = () => {
                     </Box>
 
                     <Alert severity="success" sx={{ mb: 2 }}>
-                      Our team has attended to your report. Below are the
-                      before and after photos as proof of completion.
+                      Our team has attended to your report. Below is the
+                      proof-of-service photo taken on site.
                     </Alert>
 
                     <Grid container spacing={2}>
-                      {selectedReport.completionProof.beforePhoto && (
+                      {proofBefore && (
                         <Grid size={{ xs: 12, sm: 6 }}>
                           <Typography
                             variant="caption"
@@ -698,14 +717,10 @@ export const ReportTracking: React.FC = () => {
                           </Typography>
                           <Box
                             component="img"
-                            src={selectedReport.completionProof.beforePhoto}
+                            src={proofBefore}
                             alt="Before completion"
                             loading="lazy"
-                            onClick={() =>
-                              setPreviewPhoto(
-                                selectedReport.completionProof!.beforePhoto
-                              )
-                            }
+                            onClick={() => setPreviewPhoto(proofBefore)}
                             sx={{
                               width: '100%',
                               height: 200,
@@ -722,56 +737,48 @@ export const ReportTracking: React.FC = () => {
                         </Grid>
                       )}
 
-                      {selectedReport.completionProof.afterPhoto && (
-                        <Grid size={{ xs: 12, sm: 6 }}>
-                          <Typography
-                            variant="caption"
-                            color="text.secondary"
-                            sx={{ fontWeight: 600 }}
-                          >
-                            ✅ AFTER
-                          </Typography>
-                          <Box
-                            component="img"
-                            src={selectedReport.completionProof.afterPhoto}
-                            alt="After completion"
-                            loading="lazy"
-                            onClick={() =>
-                              setPreviewPhoto(
-                                selectedReport.completionProof!.afterPhoto
-                              )
-                            }
-                            sx={{
-                              width: '100%',
-                              height: 200,
-                              objectFit: 'cover',
-                              borderRadius: 2,
-                              mt: 0.5,
-                              border: '2px solid',
-                              borderColor: 'success.light',
-                              cursor: 'pointer',
-                              transition: 'transform 0.2s',
-                              '&:hover': { transform: 'scale(1.02)' },
-                            }}
-                          />
-                        </Grid>
-                      )}
+                      <Grid size={{ xs: 12, sm: proofBefore ? 6 : 12 }}>
+                        <Typography
+                          variant="caption"
+                          color="text.secondary"
+                          sx={{ fontWeight: 600 }}
+                        >
+                          ✅ PROOF OF SERVICE (AFTER)
+                        </Typography>
+                        <Box
+                          component="img"
+                          src={proofAfter}
+                          alt="After completion"
+                          loading="lazy"
+                          onClick={() => setPreviewPhoto(proofAfter)}
+                          sx={{
+                            width: '100%',
+                            height: 240,
+                            objectFit: 'cover',
+                            borderRadius: 2,
+                            mt: 0.5,
+                            border: '2px solid',
+                            borderColor: 'success.light',
+                            cursor: 'pointer',
+                            transition: 'transform 0.2s',
+                            '&:hover': { transform: 'scale(1.02)' },
+                          }}
+                        />
+                      </Grid>
                     </Grid>
 
-                    {selectedReport.completionProof.completedAt && (
+                    {proofAt && (
                       <Typography
                         variant="caption"
                         color="text.secondary"
                         sx={{ display: 'block', mt: 1.5 }}
                       >
-                        Completed:{' '}
-                        {formatDateTime(
-                          selectedReport.completionProof.completedAt
-                        )}
+                        Completed: {formatDateTime(proofAt)}
                       </Typography>
                     )}
                   </>
-                )}
+                );
+              })()}
 
               {/* Admin Comments Section */}
               {selectedReport.adminComments &&

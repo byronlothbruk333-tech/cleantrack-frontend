@@ -699,113 +699,122 @@ export const ComplaintDetail: React.FC = () => {
                   )}
                 </Box>
               </Box>
+{/* Driver Completion Proof — prefers persisted report.proofPhoto */}
+{(() => {
+  const proofAfter =
+    complaint.proofPhoto ||
+    complaint.completionProof?.afterPhoto ||
+    null;
+  const proofBefore = complaint.completionProof?.beforePhoto || null;
+  const proofAt =
+    complaint.proofPhotoUploadedAt ||
+    complaint.completionProof?.completedAt ||
+    null;
 
-              {/* Driver Completion Proof */}
-              {complaint.completionProof &&
-                (complaint.completionProof.beforePhoto ||
-                  complaint.completionProof.afterPhoto) && (
-                  <>
-                    <Divider sx={{ my: 3 }} />
-                    <Box
-                      sx={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 1,
-                        mb: 2,
-                      }}
-                    >
-                      <VerifiedUser color="success" />
-                      <Typography variant="h6" color="success.main">
-                        Driver Completion Proof
-                      </Typography>
-                    </Box>
+  if (!proofAfter) return null;
 
-                    <Alert severity="success" sx={{ mb: 2 }}>
-                      The response unit has attended to this complaint. Below is
-                      the before and after evidence.
-                    </Alert>
+  return (
+    <>
+      <Divider sx={{ my: 3 }} />
+      <Box
+        sx={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 1,
+          mb: 2,
+        }}
+      >
+        <VerifiedUser color="success" />
+        <Typography variant="h6" color="success.main">
+          Proof of Service
+        </Typography>
+        <Chip
+          label="VERIFIED"
+          size="small"
+          color="success"
+          variant="outlined"
+        />
+      </Box>
 
-                    <Grid container spacing={2}>
-                      {complaint.completionProof.beforePhoto && (
-                        <Grid size={{ xs: 12, sm: 6 }}>
-                          <Typography
-                            variant="caption"
-                            color="text.secondary"
-                            sx={{ fontWeight: 600 }}
-                          >
-                            📷 BEFORE
-                          </Typography>
-                          <Box
-                            component="img"
-                            src={complaint.completionProof.beforePhoto}
-                            alt="Before"
-                            loading="lazy"
-                            sx={{
-                              width: '100%',
-                              height: 200,
-                              objectFit: 'cover',
-                              borderRadius: 2,
-                              mt: 0.5,
-                              border: '2px solid',
-                              borderColor: 'warning.light',
-                              cursor: 'pointer',
-                            }}
-                            onClick={() =>
-                              setPreviewPhoto(
-                                complaint.completionProof!.beforePhoto
-                              )
-                            }
-                          />
-                        </Grid>
-                      )}
+      <Alert severity="success" sx={{ mb: 2 }}>
+        The response unit has attended to this complaint. Below is the
+        proof-of-service photo submitted by the driver.
+      </Alert>
 
-                      {complaint.completionProof.afterPhoto && (
-                        <Grid size={{ xs: 12, sm: 6 }}>
-                          <Typography
-                            variant="caption"
-                            color="text.secondary"
-                            sx={{ fontWeight: 600 }}
-                          >
-                            ✅ AFTER
-                          </Typography>
-                          <Box
-                            component="img"
-                            src={complaint.completionProof.afterPhoto}
-                            alt="After"
-                            loading="lazy"
-                            sx={{
-                              width: '100%',
-                              height: 200,
-                              objectFit: 'cover',
-                              borderRadius: 2,
-                              mt: 0.5,
-                              border: '2px solid',
-                              borderColor: 'success.light',
-                              cursor: 'pointer',
-                            }}
-                            onClick={() =>
-                              setPreviewPhoto(
-                                complaint.completionProof!.afterPhoto
-                              )
-                            }
-                          />
-                        </Grid>
-                      )}
-                    </Grid>
+      <Grid container spacing={2}>
+        {proofBefore && (
+          <Grid size={{ xs: 12, sm: 6 }}>
+            <Typography
+              variant="caption"
+              color="text.secondary"
+              sx={{ fontWeight: 600 }}
+            >
+              📷 BEFORE
+            </Typography>
+            <Box
+              component="img"
+              src={proofBefore}
+              alt="Before"
+              loading="lazy"
+              sx={{
+                width: '100%',
+                height: 220,
+                objectFit: 'cover',
+                borderRadius: 2,
+                mt: 0.5,
+                border: '2px solid',
+                borderColor: 'warning.light',
+                cursor: 'pointer',
+                transition: 'transform 0.2s',
+                '&:hover': { transform: 'scale(1.02)' },
+              }}
+              onClick={() => setPreviewPhoto(proofBefore)}
+            />
+          </Grid>
+        )}
 
-                    {complaint.completionProof.completedAt && (
-                      <Typography
-                        variant="caption"
-                        color="text.secondary"
-                        sx={{ display: 'block', mt: 1.5 }}
-                      >
-                        Completed:{' '}
-                        {formatDateTime(complaint.completionProof.completedAt)}
-                      </Typography>
-                    )}
-                  </>
-                )}
+        <Grid size={{ xs: 12, sm: proofBefore ? 6 : 12 }}>
+          <Typography
+            variant="caption"
+            color="text.secondary"
+            sx={{ fontWeight: 600 }}
+          >
+            ✅ PROOF OF SERVICE (AFTER)
+          </Typography>
+          <Box
+            component="img"
+            src={proofAfter}
+            alt="Proof of service"
+            loading="lazy"
+            sx={{
+              width: '100%',
+              height: 260,
+              objectFit: 'cover',
+              borderRadius: 2,
+              mt: 0.5,
+              border: '2px solid',
+              borderColor: 'success.light',
+              cursor: 'pointer',
+              transition: 'transform 0.2s',
+              '&:hover': { transform: 'scale(1.02)' },
+            }}
+            onClick={() => setPreviewPhoto(proofAfter)}
+          />
+        </Grid>
+      </Grid>
 
+      {proofAt && (
+        <Typography
+          variant="caption"
+          color="text.secondary"
+          sx={{ display: 'block', mt: 1.5 }}
+        >
+          Completed: {formatDateTime(proofAt)}
+        </Typography>
+      )}
+    </>
+  );
+})()}
               {/* Original Photos */}
               {complaint.photos && complaint.photos.length > 0 && (
                 <>

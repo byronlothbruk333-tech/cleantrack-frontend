@@ -34,7 +34,7 @@ export interface AdminComment {
   authorRole: string;
 }
 
-// ✅ IMPROVEMENT 4: Completion proof type
+// ✅ Completion proof type
 export interface CompletionProof {
   beforePhoto: string | null;
   afterPhoto: string | null;
@@ -58,17 +58,21 @@ export interface Report extends ReportData {
   };
   adminComments?: AdminComment[];
 
-  // ✅ Feature 1: Admin response to FAB alert / report
+  // Admin response
   adminResponse?: string | null;
   adminRespondedAt?: string | null;
   adminRespondedBy?: string | null;
 
-  // ✅ Excel enhancements
+  // Excel enhancements
   assignedTruck?: string | null;
   assignedDriver?: string | null;
 
-  // ✅ IMPROVEMENT 4: Completion proof from driver
+  // Completion proof (driver's after photo) — resolved view
   completionProof?: CompletionProof | null;
+
+  // ✅ NEW: Persisted proof-of-service on the report itself
+  proofPhoto?: string | null;
+  proofPhotoUploadedAt?: string | null;
 }
 
 export interface ReportStats {
@@ -101,7 +105,7 @@ export interface EmergencyResponse {
   adminResponse: string;
   respondedAt: string;
   createdAt: string;
-   isResolved?: boolean;
+  isResolved?: boolean;
   resolvedAt?: string | null;
 }
 
@@ -109,7 +113,6 @@ export interface EmergencyResponse {
 // REPORT SERVICE
 // ============================================
 export const reportService = {
-  // ✅ Admin responds to a report / emergency
   respondToReport: async (
     id: string,
     response: string
@@ -118,7 +121,6 @@ export const reportService = {
     return res.data;
   },
 
-  // ✅ Driver fetches admin responses to their alerts
   getMyEmergencyResponses: async (): Promise<{
     count: number;
     responses: EmergencyResponse[];
@@ -242,8 +244,6 @@ export const reportService = {
     return response.data;
   },
 
-  // ✅ NEW: Fetch just the completion proof for a specific report
-  // Useful if you want to refresh proof without fetching the whole report
   getReportCompletionProof: async (
     id: string
   ): Promise<{ completionProof: CompletionProof | null }> => {

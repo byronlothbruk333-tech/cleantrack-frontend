@@ -51,6 +51,9 @@ export interface Complaint {
   adminRespondedBy?: string | null;
   // ✅ IMPROVEMENT 4: Driver completion proof
   completionProof?: CompletionProof | null;
+  // ✅ NEW: Proof-of-service photo (persisted on the report after stop deletion)
+  proofPhoto?: string | null;
+  proofPhotoUploadedAt?: string | null;
 }
 
 export interface Comment {
