@@ -524,117 +524,136 @@ export const AdminDashboard: React.FC = () => {
                   </TableRow>
                 </TableHead>
                 <TableBody>
-                  {trucks.map((truck) => (
-                    <TableRow key={truck.id}>
-                      <TableCell>{truck.truckId}</TableCell>
-                      <TableCell>
-                        <Chip
-                          label={
-                            truck.truckType === 'response-unit'
-                              ? '🚨 RESPONSE'
-                              : '🚛 COLLECTION'
-                          }
-                          size="small"
-                          color={
-                            truck.truckType === 'response-unit'
-                              ? 'error'
-                              : 'default'
-                          }
-                          variant={
-                            truck.truckType === 'response-unit'
-                              ? 'filled'
-                              : 'outlined'
-                          }
-                          sx={{ fontSize: '0.7rem', height: 22 }}
-                        />
-                      </TableCell>
-                      <TableCell>{truck.driverName}</TableCell>
-                      <TableCell>{truck.zone}</TableCell>
-                      <TableCell>
-                        {truck.truckType === 'response-unit' ? (
+                  {trucks.map((truck) => {
+                    const isResponse = truck.truckType === 'response-unit';
+
+                    return (
+                      <TableRow key={truck.id}>
+                        <TableCell>{truck.truckId}</TableCell>
+                        <TableCell>
                           <Chip
-                            label="ON-CALL"
+                            label={
+                              isResponse ? '🚨 RESPONSE' : '🚛 COLLECTION'
+                            }
                             size="small"
-                            color="error"
-                            variant="outlined"
-                            sx={{ fontSize: '0.65rem', height: 20 }}
+                            color={isResponse ? 'error' : 'default'}
+                            variant={isResponse ? 'filled' : 'outlined'}
+                            sx={{ fontSize: '0.7rem', height: 22 }}
                           />
-                        ) : (
-                          <Box
-                            sx={{
-                              display: 'flex',
-                              gap: 0.5,
-                              flexWrap: 'wrap',
-                            }}
-                          >
-                            {(truck.workingDays || []).map((day) => (
-                              <Chip
-                                key={day}
-                                label={day.slice(0, 3).toUpperCase()}
-                                size="small"
-                                variant="outlined"
-                                sx={{ fontSize: '0.65rem', height: 20 }}
+                        </TableCell>
+                        <TableCell>{truck.driverName}</TableCell>
+
+                        {/* ✅ Zone — hidden for response units */}
+                        <TableCell>
+                          {isResponse ? (
+                            <Typography
+                              variant="body2"
+                              color="text.disabled"
+                            >
+                              —
+                            </Typography>
+                          ) : (
+                            truck.zone
+                          )}
+                        </TableCell>
+
+                        <TableCell>
+                          {isResponse ? (
+                            <Chip
+                              label="ON-CALL"
+                              size="small"
+                              color="error"
+                              variant="outlined"
+                              sx={{ fontSize: '0.65rem', height: 20 }}
+                            />
+                          ) : (
+                            <Box
+                              sx={{
+                                display: 'flex',
+                                gap: 0.5,
+                                flexWrap: 'wrap',
+                              }}
+                            >
+                              {(truck.workingDays || []).map((day) => (
+                                <Chip
+                                  key={day}
+                                  label={day.slice(0, 3).toUpperCase()}
+                                  size="small"
+                                  variant="outlined"
+                                  sx={{ fontSize: '0.65rem', height: 20 }}
+                                />
+                              ))}
+                            </Box>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          <Chip
+                            label={truck.status.toUpperCase().replace('-', ' ')}
+                            color={getStatusColor(truck.status)}
+                            size="small"
+                          />
+                        </TableCell>
+
+                        {/* ✅ Completion — hidden for response units */}
+                        <TableCell>
+                          {isResponse ? (
+                            <Typography
+                              variant="body2"
+                              color="text.disabled"
+                            >
+                              —
+                            </Typography>
+                          ) : (
+                            <Box
+                              sx={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: 1,
+                              }}
+                            >
+                              <LinearProgress
+                                variant="determinate"
+                                value={truck.completion}
+                                sx={{ flex: 1, height: 6, borderRadius: 3 }}
+                                color={
+                                  truck.completion >= 80
+                                    ? 'success'
+                                    : truck.completion >= 50
+                                    ? 'warning'
+                                    : 'error'
+                                }
                               />
-                            ))}
-                          </Box>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        <Chip
-                          label={truck.status.toUpperCase().replace('-', ' ')}
-                          color={getStatusColor(truck.status)}
-                          size="small"
-                        />
-                      </TableCell>
-                      <TableCell>
-                        <Box
-                          sx={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: 1,
-                          }}
-                        >
-                          <LinearProgress
-                            variant="determinate"
-                            value={truck.completion}
-                            sx={{ flex: 1, height: 6, borderRadius: 3 }}
-                            color={
-                              truck.completion >= 80
-                                ? 'success'
-                                : truck.completion >= 50
-                                ? 'warning'
-                                : 'error'
-                            }
-                          />
-                          <Typography variant="caption">
-                            {truck.completion}%
-                          </Typography>
-                        </Box>
-                      </TableCell>
-                      <TableCell>
-                        {/* ✅ IMPROVEMENT 2: Hide "View Route" button for response units */}
-                        {truck.truckType !== 'response-unit' ? (
-                          <Button
-                            size="small"
-                            variant="outlined"
-                            onClick={() =>
-                              navigate(`/admin/route/${truck.truckId}`)
-                            }
-                          >
-                            View Route
-                          </Button>
-                        ) : (
-                          <Chip
-                            label="Standby"
-                            size="small"
-                            variant="outlined"
-                            color="error"
-                            sx={{ fontSize: '0.7rem' }}
-                          />
-                        )}
-                      </TableCell>
-                    </TableRow>
-                  ))}
+                              <Typography variant="caption">
+                                {truck.completion}%
+                              </Typography>
+                            </Box>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          {/* ✅ IMPROVEMENT 2: Hide "View Route" button for response units */}
+                          {!isResponse ? (
+                            <Button
+                              size="small"
+                              variant="outlined"
+                              onClick={() =>
+                                navigate(`/admin/route/${truck.truckId}`)
+                              }
+                            >
+                              View Route
+                            </Button>
+                          ) : (
+                            <Chip
+                              label="Standby"
+                              size="small"
+                              variant="outlined"
+                              color="error"
+                              sx={{ fontSize: '0.7rem' }}
+                            />
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
                 </TableBody>
               </Table>
             </TableContainer>
