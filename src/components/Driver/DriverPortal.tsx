@@ -27,6 +27,7 @@ import {
   InputLabel,
   Select,
   MenuItem,
+  Divider,
 } from '@mui/material';
 import {
   Route as RouteIcon,
@@ -40,6 +41,7 @@ import {
   Delete,
   SkipNext,
   Refresh,
+  ReportProblem,
 } from '@mui/icons-material';
 import {
   routeService,
@@ -61,16 +63,26 @@ const EMERGENCY_TYPES = [
 ];
 
 // ============================================
+// HELPER: Is this a complaint-response route?
+// ============================================
+const isResponseRoute = (route: Route): boolean => {
+  return !!route.notes && route.notes.startsWith('Complaint response route');
+};
+
+// ============================================
 // COMPONENT
 // ============================================
 export const DriverPortal: React.FC = () => {
-  const [route, setRoute] = useState<Route | null>(null);
+  const [routes, setRoutes] = useState<Route[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [actionLoading, setActionLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
 
   const [selectedStop, setSelectedStop] = useState<RouteStop | null>(null);
+  const [selectedStopRoute, setSelectedStopRoute] = useState<Route | null>(
+    null
+  );
   const [showSkipDialog, setShowSkipDialog] = useState(false);
   const [skipReason, setSkipReason] = useState('');
 
@@ -87,19 +99,25 @@ export const DriverPortal: React.FC = () => {
   const [emergencySubmitting, setEmergencySubmitting] = useState(false);
 
   // ============================================
-  // LOAD TODAY'S ROUTE
+  // LOAD TODAY'S ROUTES
   // ============================================
   useEffect(() => {
     let isMounted = true;
 
-    const loadRoute = async () => {
+    const loadRoutes = async () => {
       setLoading(true);
       setError('');
 
       try {
         const data = await routeService.getTodaysRoute();
         if (isMounted) {
-          setRoute(data.route);
+          // ✅ Handle both response shapes (new: routes[], old: route)
+          const list: Route[] = Array.isArray(data.routes)
+            ? data.routes
+            : data.route
+            ? [data.route]
+            : [];
+          setRoutes(list);
         }
       } catch (err: unknown) {
         const error = err as {
@@ -109,7 +127,7 @@ export const DriverPortal: React.FC = () => {
           setError(
             error.response?.data?.message ||
               error.response?.data?.error ||
-              "Failed to load today's route. Please try again."
+              "Failed to load today's routes. Please try again."
           );
         }
       } finally {
@@ -119,7 +137,7 @@ export const DriverPortal: React.FC = () => {
       }
     };
 
-    loadRoute();
+    loadRoutes();
 
     return () => {
       isMounted = false;
@@ -127,13 +145,18 @@ export const DriverPortal: React.FC = () => {
   }, []);
 
   // ============================================
-  // REFRESH ROUTE
+  // REFRESH
   // ============================================
-  const refreshRoute = async () => {
+  const refreshRoutes = async () => {
     setRefreshing(true);
     try {
       const data = await routeService.getTodaysRoute();
-      setRoute(data.route);
+      const list: Route[] = Array.isArray(data.routes)
+        ? data.routes
+        : data.route
+        ? [data.route]
+        : [];
+      setRoutes(list);
     } catch (err) {
       console.error('Refresh failed:', err);
     } finally {
@@ -142,11 +165,17 @@ export const DriverPortal: React.FC = () => {
   };
 
   // ============================================
-  // PROGRESS
+  // AGGREGATE PROGRESS
   // ============================================
-  const completedStops =
-    route?.stops?.filter((s) => s.status === 'completed').length || 0;
-  const totalStops = route?.stops?.length || 0;
+  const totalStops = routes.reduce(
+    (sum, r) => sum + (r.stops?.length || 0),
+    0
+  );
+  const completedStops = routes.reduce(
+    (sum, r) =>
+      sum + (r.stops?.filter((s) => s.status === 'completed').length || 0),
+    0
+  );
   const progress = totalStops > 0 ? (completedStops / totalStops) * 100 : 0;
 
   // ============================================
@@ -186,10 +215,8 @@ export const DriverPortal: React.FC = () => {
 
   // ============================================
   // COMPLETE STOP
-  // ✅ Fixed: Handles the case where complaint stops are removed
-  //    (backend returns stop: null) without crashing the state update.
   // ============================================
-  const handleCompleteStop = async (stop: RouteStop) => {
+  const handleCompleteStop = async (stop: RouteStop, route: Route) => {
     if (!route) return;
 
     if (stop.isComplaintStop) {
@@ -214,29 +241,29 @@ export const DriverPortal: React.FC = () => {
         afterPhoto: afterPhotoUrl || undefined,
       });
 
-      // ✅ If this was a complaint stop, the backend removes it from the route.
-      // Safely refetch the whole route instead of trying to patch state with
-      // a null `stop` value (which was crashing the render).
       if (stop.isComplaintStop) {
-        await refreshRoute();
+        // Complaint stop was removed → refetch everything
+        await refreshRoutes();
       } else {
-        // Regular stop — safe to update in place
-        setRoute((prev) => {
-          if (!prev || !prev.stops) return prev;
-          return {
-            ...prev,
-            completedStops: response.routeProgress.completedStops,
-            status: response.routeProgress.routeStatus,
-            stops: prev.stops.map((s) =>
-              // ✅ Guard against null `response.stop`
-              s.id === stop.id && response.stop ? response.stop : s
-            ),
-          };
-        });
+        // Regular stop — patch just this route in the array
+        setRoutes((prev) =>
+          prev.map((r) => {
+            if (r.id !== route.id || !r.stops) return r;
+            return {
+              ...r,
+              completedStops: response.routeProgress.completedStops,
+              status: response.routeProgress.routeStatus,
+              stops: r.stops.map((s) =>
+                s.id === stop.id && response.stop ? response.stop : s
+              ),
+            };
+          })
+        );
       }
 
       removePhoto();
       setSelectedStop(null);
+      setSelectedStopRoute(null);
     } catch (err: unknown) {
       const error = err as {
         response?: { data?: { message?: string; error?: string } };
@@ -260,7 +287,7 @@ export const DriverPortal: React.FC = () => {
   };
 
   const handleSkipStop = async () => {
-    if (!route || !selectedStop) return;
+    if (!selectedStopRoute || !selectedStop) return;
 
     if (!skipReason.trim()) {
       alert('Please provide a reason for skipping');
@@ -270,24 +297,27 @@ export const DriverPortal: React.FC = () => {
     setActionLoading(true);
     try {
       const response = await routeService.skipStop(
-        route.id,
+        selectedStopRoute.id,
         selectedStop.id,
         skipReason
       );
 
-      setRoute((prev) => {
-        if (!prev || !prev.stops) return prev;
-        return {
-          ...prev,
-          stops: prev.stops.map((s) =>
-            s.id === selectedStop.id && response.stop ? response.stop : s
-          ),
-        };
-      });
+      setRoutes((prev) =>
+        prev.map((r) => {
+          if (r.id !== selectedStopRoute.id || !r.stops) return r;
+          return {
+            ...r,
+            stops: r.stops.map((s) =>
+              s.id === selectedStop.id && response.stop ? response.stop : s
+            ),
+          };
+        })
+      );
 
       setShowSkipDialog(false);
       setSkipReason('');
       setSelectedStop(null);
+      setSelectedStopRoute(null);
     } catch (err: unknown) {
       const error = err as {
         response?: { data?: { message?: string; error?: string } };
@@ -314,7 +344,13 @@ export const DriverPortal: React.FC = () => {
   const handleSendEmergency = async () => {
     setEmergencySubmitting(true);
     try {
-      const currentStop = route?.stops?.find((s) => s.status === 'pending');
+      // First pending stop across all routes
+      let currentStop: RouteStop | undefined;
+      for (const r of routes) {
+        currentStop = r.stops?.find((s) => s.status === 'pending');
+        if (currentStop) break;
+      }
+
       const latitude = currentStop?.latitude
         ? Number(currentStop.latitude)
         : -9.4438;
@@ -377,7 +413,7 @@ export const DriverPortal: React.FC = () => {
   };
 
   // ============================================
-  // LOADING / ERROR
+  // LOADING / ERROR / EMPTY
   // ============================================
   if (loading) {
     return (
@@ -389,7 +425,7 @@ export const DriverPortal: React.FC = () => {
     );
   }
 
-  if (error && !route) {
+  if (error && routes.length === 0) {
     return (
       <Container maxWidth="xl" sx={{ py: 4 }}>
         <Alert severity="error">{error}</Alert>
@@ -397,7 +433,7 @@ export const DriverPortal: React.FC = () => {
     );
   }
 
-  if (!route) {
+  if (routes.length === 0) {
     return (
       <Container maxWidth="xl" sx={{ py: 4 }}>
         <Alert severity="info">
@@ -413,7 +449,9 @@ export const DriverPortal: React.FC = () => {
   return (
     <Container maxWidth="xl" sx={{ py: 4 }}>
       <Grid container spacing={3}>
-        {/* Header */}
+        {/* ============================================ */}
+        {/* Header: aggregate across all routes */}
+        {/* ============================================ */}
         <Grid size={{ xs: 12 }}>
           <Paper sx={{ p: 3, bgcolor: 'primary.main', color: 'white' }}>
             <Grid
@@ -424,28 +462,27 @@ export const DriverPortal: React.FC = () => {
               <Grid size="auto">
                 <Typography variant="h5">
                   <DirectionsCar sx={{ mr: 1, verticalAlign: 'middle' }} />
-                  Today's Route
+                  Today's Work
                 </Typography>
                 <Typography variant="body2" sx={{ opacity: 0.8 }}>
-                  Truck: {route.truck?.truckId || 'N/A'} | Zone: {route.zone} |{' '}
-                  {route.suburb}
+                  Truck: {routes[0].truck?.truckId || 'N/A'} | Zone:{' '}
+                  {routes[0].zone} | {routes.length} route
+                  {routes.length !== 1 ? 's' : ''}
                 </Typography>
               </Grid>
               <Grid size="auto">
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                   <Chip
-                    label={route.status.toUpperCase().replace('-', ' ')}
-                    color={
-                      route.status === 'in-progress' ? 'warning' : 'success'
-                    }
+                    label={`${completedStops}/${totalStops} stops`}
                     sx={{ color: 'white' }}
+                    variant="outlined"
                   />
                   <IconButton
                     color="inherit"
-                    onClick={refreshRoute}
+                    onClick={refreshRoutes}
                     disabled={refreshing}
                     sx={{ color: 'white' }}
-                    title="Refresh route"
+                    title="Refresh routes"
                   >
                     {refreshing ? (
                       <CircularProgress size={20} color="inherit" />
@@ -459,12 +496,14 @@ export const DriverPortal: React.FC = () => {
           </Paper>
         </Grid>
 
-        {/* Progress */}
+        {/* ============================================ */}
+        {/* Aggregate Progress */}
+        {/* ============================================ */}
         <Grid size={{ xs: 12 }}>
           <Card>
             <CardContent>
               <Typography variant="body2" color="text.secondary" gutterBottom>
-                Route Progress
+                Total Progress (all routes)
               </Typography>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
                 <Box sx={{ flex: 1 }}>
@@ -475,114 +514,209 @@ export const DriverPortal: React.FC = () => {
                   />
                 </Box>
                 <Typography variant="h6">{Math.round(progress)}%</Typography>
-                <Typography variant="body2" color="text.secondary">
-                  {completedStops}/{totalStops} stops
-                </Typography>
               </Box>
             </CardContent>
           </Card>
         </Grid>
 
-        {/* Stops List */}
+        {/* ============================================ */}
+        {/* Left column: one card per route */}
+        {/* ============================================ */}
         <Grid size={{ xs: 12, md: 7 }}>
-          <Card>
-            <CardContent>
-              <Typography
-                variant="h6"
-                gutterBottom
-                sx={{ display: 'flex', alignItems: 'center', gap: 1 }}
-              >
-                <Schedule /> Stops ({totalStops})
-              </Typography>
-              <List>
-                {route.stops?.map((stop, index) => (
-                  <ListItem
-                    key={stop.id}
-                    onClick={() => {
-                      setSelectedStop(stop);
-                      removePhoto();
-                    }}
-                    sx={{
-                      cursor: 'pointer',
-                      borderLeft: `4px solid ${
-                        stop.status === 'completed'
-                          ? '#4CAF50'
-                          : stop.status === 'skipped'
-                          ? '#f44336'
-                          : '#FFA726'
-                      }`,
-                      mb: 1,
-                      bgcolor: 'background.paper',
-                      borderRadius: 1,
-                      '&:hover': { bgcolor: 'action.hover' },
-                    }}
-                  >
-                    <ListItemIcon>
-                      {stop.status === 'completed' ? (
-                        <CheckCircle color="success" />
-                      ) : stop.status === 'skipped' ? (
-                        <SkipNext color="error" />
-                      ) : (
-                        <LocationOn color="warning" />
-                      )}
-                    </ListItemIcon>
-                    <ListItemText
-                      primary={
-                        <Box
-                          sx={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: 1,
-                            flexWrap: 'wrap',
-                          }}
-                        >
-                          <Typography variant="body1">
-                            {index + 1}. {stop.address}
-                          </Typography>
-                          {stop.isComplaintStop && (
-                            <Chip
-                              label={getComplaintLabel(stop)}
-                              size="small"
-                              color={getComplaintColor(stop)}
-                              variant="outlined"
-                            />
-                          )}
-                        </Box>
-                      }
-                      secondary={
-                        <Typography variant="caption" color="text.secondary">
-                          Status: {stop.status.toUpperCase()}
-                          {stop.completedAt &&
-                            ` | Completed: ${new Date(
-                              stop.completedAt
-                            ).toLocaleTimeString()}`}
-                        </Typography>
-                      }
-                    />
-                    {stop.status === 'pending' && (
-                      <Button
-                        variant="contained"
-                        size="small"
-                        startIcon={<CheckCircle />}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleCompleteStop(stop);
-                        }}
-                        disabled={actionLoading}
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+            {routes.map((route) => {
+              const routeCompleted =
+                route.stops?.filter((s) => s.status === 'completed').length ||
+                0;
+              const routeTotal = route.stops?.length || 0;
+              const routeProgress =
+                routeTotal > 0 ? (routeCompleted / routeTotal) * 100 : 0;
+              const isResponse = isResponseRoute(route);
+
+              return (
+                <Card
+                  key={route.id}
+                  sx={{
+                    borderLeft: isResponse
+                      ? '4px solid #f44336'
+                      : '4px solid #1976d2',
+                  }}
+                >
+                  <CardContent>
+                    {/* Route header */}
+                    <Box
+                      sx={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        mb: 1,
+                        flexWrap: 'wrap',
+                        gap: 1,
+                      }}
+                    >
+                      <Typography
+                        variant="h6"
+                        sx={{ display: 'flex', alignItems: 'center', gap: 1 }}
                       >
-                        Complete
-                      </Button>
+                        {isResponse ? <ReportProblem /> : <Schedule />}
+                        {isResponse
+                          ? 'Complaint Response'
+                          : `${route.zone} — ${route.suburb}`}
+                      </Typography>
+                      <Chip
+                        label={route.status.toUpperCase().replace('-', ' ')}
+                        color={
+                          route.status === 'completed'
+                            ? 'success'
+                            : route.status === 'in-progress'
+                            ? 'warning'
+                            : 'default'
+                        }
+                        size="small"
+                      />
+                    </Box>
+
+                    {isResponse && (
+                      <Typography
+                        variant="caption"
+                        color="text.secondary"
+                        sx={{ display: 'block', mb: 1 }}
+                      >
+                        Assigned from a citizen complaint · {routeTotal} stop
+                        {routeTotal !== 1 ? 's' : ''}
+                      </Typography>
                     )}
-                  </ListItem>
-                ))}
-              </List>
-            </CardContent>
-          </Card>
+
+                    <Divider sx={{ my: 1.5 }} />
+
+                    {/* Per-route progress */}
+                    <Box
+                      sx={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 2,
+                        mb: 2,
+                      }}
+                    >
+                      <LinearProgress
+                        variant="determinate"
+                        value={routeProgress}
+                        sx={{ flex: 1, height: 6, borderRadius: 3 }}
+                      />
+                      <Typography variant="caption" color="text.secondary">
+                        {routeCompleted}/{routeTotal}
+                      </Typography>
+                    </Box>
+
+                    {/* Stops list */}
+                    {routeTotal === 0 ? (
+                      <Typography
+                        variant="body2"
+                        color="text.secondary"
+                        sx={{ py: 1 }}
+                      >
+                        No stops on this route.
+                      </Typography>
+                    ) : (
+                      <List disablePadding>
+                        {route.stops?.map((stop, index) => (
+                          <ListItem
+                            key={stop.id}
+                            onClick={() => {
+                              setSelectedStop(stop);
+                              setSelectedStopRoute(route);
+                              removePhoto();
+                            }}
+                            sx={{
+                              cursor: 'pointer',
+                              borderLeft: `4px solid ${
+                                stop.status === 'completed'
+                                  ? '#4CAF50'
+                                  : stop.status === 'skipped'
+                                  ? '#f44336'
+                                  : '#FFA726'
+                              }`,
+                              mb: 1,
+                              bgcolor: 'background.paper',
+                              borderRadius: 1,
+                              '&:hover': { bgcolor: 'action.hover' },
+                            }}
+                          >
+                            <ListItemIcon>
+                              {stop.status === 'completed' ? (
+                                <CheckCircle color="success" />
+                              ) : stop.status === 'skipped' ? (
+                                <SkipNext color="error" />
+                              ) : (
+                                <LocationOn color="warning" />
+                              )}
+                            </ListItemIcon>
+                            <ListItemText
+                              primary={
+                                <Box
+                                  sx={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: 1,
+                                    flexWrap: 'wrap',
+                                  }}
+                                >
+                                  <Typography variant="body1">
+                                    {index + 1}. {stop.address}
+                                  </Typography>
+                                  {stop.isComplaintStop && (
+                                    <Chip
+                                      label={getComplaintLabel(stop)}
+                                      size="small"
+                                      color={getComplaintColor(stop)}
+                                      variant="outlined"
+                                    />
+                                  )}
+                                </Box>
+                              }
+                              secondary={
+                                <Typography
+                                  variant="caption"
+                                  color="text.secondary"
+                                >
+                                  Status: {stop.status.toUpperCase()}
+                                  {stop.completedAt &&
+                                    ` | Completed: ${new Date(
+                                      stop.completedAt
+                                    ).toLocaleTimeString()}`}
+                                </Typography>
+                              }
+                            />
+                            {stop.status === 'pending' && (
+                              <Button
+                                variant="contained"
+                                size="small"
+                                startIcon={<CheckCircle />}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleCompleteStop(stop, route);
+                                }}
+                                disabled={actionLoading}
+                              >
+                                Complete
+                              </Button>
+                            )}
+                          </ListItem>
+                        ))}
+                      </List>
+                    )}
+                  </CardContent>
+                </Card>
+              );
+            })}
+          </Box>
         </Grid>
 
-        {/* Selected Stop Details */}
+        {/* ============================================ */}
+        {/* Right column: Selected stop details */}
+        {/* ============================================ */}
         <Grid size={{ xs: 12, md: 5 }}>
-          <Card sx={{ height: '100%' }}>
+          <Card sx={{ position: 'sticky', top: 16 }}>
             <CardContent>
               {selectedStop ? (
                 <>
@@ -727,7 +861,10 @@ export const DriverPortal: React.FC = () => {
                             <CheckCircle />
                           )
                         }
-                        onClick={() => handleCompleteStop(selectedStop)}
+                        onClick={() =>
+                          selectedStopRoute &&
+                          handleCompleteStop(selectedStop, selectedStopRoute)
+                        }
                         disabled={
                           actionLoading ||
                           selectedStop.status === 'completed' ||
@@ -780,7 +917,8 @@ export const DriverPortal: React.FC = () => {
                     sx={{ fontSize: 60, color: 'text.secondary', mb: 2 }}
                   />
                   <Typography variant="body1" color="text.secondary">
-                    Select a stop from the list to view details and take action
+                    Select a stop from any route to view details and take
+                    action
                   </Typography>
                 </Box>
               )}
@@ -789,7 +927,9 @@ export const DriverPortal: React.FC = () => {
         </Grid>
       </Grid>
 
+      {/* ============================================ */}
       {/* Photo Upload Dialog — After Only */}
+      {/* ============================================ */}
       <Dialog
         open={showPhotoDialog}
         onClose={() => setShowPhotoDialog(false)}
@@ -853,7 +993,9 @@ export const DriverPortal: React.FC = () => {
         </DialogActions>
       </Dialog>
 
+      {/* ============================================ */}
       {/* Skip Stop Dialog */}
+      {/* ============================================ */}
       <Dialog
         open={showSkipDialog}
         onClose={() => setShowSkipDialog(false)}
@@ -889,7 +1031,9 @@ export const DriverPortal: React.FC = () => {
         </DialogActions>
       </Dialog>
 
+      {/* ============================================ */}
       {/* Emergency Dispatch Dialog */}
+      {/* ============================================ */}
       <Dialog
         open={openEmergencyDialog}
         onClose={() => setOpenEmergencyDialog(false)}
@@ -955,7 +1099,9 @@ export const DriverPortal: React.FC = () => {
         </DialogActions>
       </Dialog>
 
+      {/* ============================================ */}
       {/* Emergency FAB */}
+      {/* ============================================ */}
       <Fab
         color="error"
         sx={{

@@ -33,7 +33,7 @@ export interface RouteStop {
   beforePhoto?: string | null;
   afterPhoto?: string | null;
 
-  // ✅ NEW: Report data attached for complaint stops
+  // ✅ Report data attached for complaint stops
   reportPhotos?: string[];
   reportDescription?: string | null;
   reportIssueType?: string | null;
@@ -104,13 +104,29 @@ export interface GetAllRoutesResponse {
 }
 
 // ============================================
+// TODAY'S ROUTES RESPONSE
+// ✅ The backend now returns ALL of today's routes:
+//    • Collection route (if today is a collection day)
+//    • Any complaint-response routes assigned today
+// The `route` alias points at the first item for backwards
+// compatibility.
+// ============================================
+export interface TodaysRoutesResponse {
+  routes: Route[];
+  route: Route | null;
+}
+
+// ============================================
 // ROUTE SERVICE
 // ============================================
 export const routeService = {
   // ----------------------------------------
-  // GET TODAY'S ROUTE (driver)
+  // GET TODAY'S ROUTES (driver)
+  // ✅ Returns an array of routes:
+  //    • Collection route (if today is a collection day)
+  //    • Any complaint-response routes assigned today
   // ----------------------------------------
-  getTodaysRoute: async (): Promise<{ route: Route }> => {
+  getTodaysRoute: async (): Promise<TodaysRoutesResponse> => {
     const response = await api.get('/routes/today');
     return response.data;
   },
