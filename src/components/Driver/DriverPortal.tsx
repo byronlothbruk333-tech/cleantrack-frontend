@@ -186,6 +186,8 @@ export const DriverPortal: React.FC = () => {
 
   // ============================================
   // COMPLETE STOP
+  // ✅ Fixed: Handles the case where complaint stops are removed
+  //    (backend returns stop: null) without crashing the state update.
   // ============================================
   const handleCompleteStop = async (stop: RouteStop) => {
     if (!route) return;
@@ -212,15 +214,26 @@ export const DriverPortal: React.FC = () => {
         afterPhoto: afterPhotoUrl || undefined,
       });
 
-      setRoute((prev) => {
-        if (!prev || !prev.stops) return prev;
-        return {
-          ...prev,
-          completedStops: response.routeProgress.completedStops,
-          status: response.routeProgress.routeStatus,
-          stops: prev.stops.map((s) => (s.id === stop.id ? response.stop : s)),
-        };
-      });
+      // ✅ If this was a complaint stop, the backend removes it from the route.
+      // Safely refetch the whole route instead of trying to patch state with
+      // a null `stop` value (which was crashing the render).
+      if (stop.isComplaintStop) {
+        await refreshRoute();
+      } else {
+        // Regular stop — safe to update in place
+        setRoute((prev) => {
+          if (!prev || !prev.stops) return prev;
+          return {
+            ...prev,
+            completedStops: response.routeProgress.completedStops,
+            status: response.routeProgress.routeStatus,
+            stops: prev.stops.map((s) =>
+              // ✅ Guard against null `response.stop`
+              s.id === stop.id && response.stop ? response.stop : s
+            ),
+          };
+        });
+      }
 
       removePhoto();
       setSelectedStop(null);
@@ -267,7 +280,7 @@ export const DriverPortal: React.FC = () => {
         return {
           ...prev,
           stops: prev.stops.map((s) =>
-            s.id === selectedStop.id ? response.stop : s
+            s.id === selectedStop.id && response.stop ? response.stop : s
           ),
         };
       });
