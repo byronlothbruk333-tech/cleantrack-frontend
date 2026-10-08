@@ -11,7 +11,6 @@ import {
   ListItem,
   ListItemText,
   ListItemIcon,
-  Avatar,
   Chip,
   LinearProgress,
   Paper,
@@ -28,10 +27,6 @@ import {
   InputLabel,
   Select,
   MenuItem,
-  Divider,
-  ImageList,
-  ImageListItem,
-  Snackbar,
 } from '@mui/material';
 import {
   Route as RouteIcon,
@@ -45,17 +40,11 @@ import {
   Delete,
   SkipNext,
   Refresh,
-  ChatBubbleOutlineOutlined,
-  Close as CloseIcon,
-  MyLocation as MyLocationIcon,
-  ChevronLeft as ChevronLeftIcon,
-  ChevronRight as ChevronRightIcon,
 } from '@mui/icons-material';
 import {
   routeService,
   type Route,
   type RouteStop,
-  type ReportCommentSummary,
 } from '../../Services/routeService';
 import { uploadService } from '../../Services/uploadService';
 import { reportService } from '../../Services/reportService';
@@ -71,9 +60,6 @@ const EMERGENCY_TYPES = [
   { value: 'other', label: '⚠️ Other Emergency' },
 ];
 
-// localStorage key for dismissed FAB responses
-const DISMISSED_RESPONSES_KEY = 'driver_dismissed_emergency_responses';
-
 // ============================================
 // COMPONENT
 // ============================================
@@ -88,17 +74,9 @@ export const DriverPortal: React.FC = () => {
   const [showSkipDialog, setShowSkipDialog] = useState(false);
   const [skipReason, setSkipReason] = useState('');
 
-  // Photo preview state (with navigation)
-  const [previewPhoto, setPreviewPhoto] = useState<string | null>(null);
-  const [previewPhotoIndex, setPreviewPhotoIndex] = useState(0);
-  const [previewPhotoList, setPreviewPhotoList] = useState<string[]>([]);
-
-  // Photo dialog state
+  // Photo dialog state — only AFTER photo now
   const [showPhotoDialog, setShowPhotoDialog] = useState(false);
-  const [photoType, setPhotoType] = useState<'before' | 'after'>('before');
-  const [beforePhotoFile, setBeforePhotoFile] = useState<File | null>(null);
   const [afterPhotoFile, setAfterPhotoFile] = useState<File | null>(null);
-  const [beforePhotoPreview, setBeforePhotoPreview] = useState<string>('');
   const [afterPhotoPreview, setAfterPhotoPreview] = useState<string>('');
   const fileInputRef = React.useRef<HTMLInputElement>(null);
 
@@ -107,58 +85,6 @@ export const DriverPortal: React.FC = () => {
   const [emergencyType, setEmergencyType] = useState<string>('breakdown');
   const [emergencyDescription, setEmergencyDescription] = useState('');
   const [emergencySubmitting, setEmergencySubmitting] = useState(false);
-
-  // GPS location state for emergency alerts
-  const [emergencyLocation, setEmergencyLocation] = useState<{
-    latitude: number;
-    longitude: number;
-    accuracy?: number;
-  } | null>(null);
-  const [locationFetching, setLocationFetching] = useState(false);
-  const [locationError, setLocationError] = useState('');
-
-  // Admin responses to my emergency alerts
-  const [emergencyResponses, setEmergencyResponses] = useState<
-    Array<{
-      id: string;
-      emergencyType: string;
-      adminResponse: string;
-      respondedAt: string;
-      createdAt: string;
-      isResolved?: boolean;
-      resolvedAt?: string | null;
-    }>
-  >([]);
-
-  // Dismissed responses persisted to localStorage
-  const [dismissedResponses, setDismissedResponses] = useState<string[]>(
-    () => {
-      try {
-        const stored = localStorage.getItem(DISMISSED_RESPONSES_KEY);
-        return stored ? JSON.parse(stored) : [];
-      } catch {
-        return [];
-      }
-    }
-  );
-
-  // ============================================
-  // ✅ SNACKBAR STATE (replaces browser alert())
-  // ============================================
-  const [snackbarOpen, setSnackbarOpen] = useState(false);
-  const [snackbarMessage, setSnackbarMessage] = useState('');
-  const [snackbarSeverity, setSnackbarSeverity] = useState<
-    'success' | 'error' | 'warning' | 'info'
-  >('info');
-
-  const showSnackbar = (
-    message: string,
-    severity: typeof snackbarSeverity
-  ) => {
-    setSnackbarMessage(message);
-    setSnackbarSeverity(severity);
-    setSnackbarOpen(true);
-  };
 
   // ============================================
   // LOAD TODAY'S ROUTE
@@ -173,7 +99,7 @@ export const DriverPortal: React.FC = () => {
       try {
         const data = await routeService.getTodaysRoute();
         if (isMounted) {
-          setRoute(data && data.route ? data.route : null);
+          setRoute(data.route);
         }
       } catch (err: unknown) {
         const error = err as {
@@ -201,64 +127,13 @@ export const DriverPortal: React.FC = () => {
   }, []);
 
   // ============================================
-  // POLL FOR ADMIN RESPONSES TO MY EMERGENCY ALERTS
-  // ============================================
-  useEffect(() => {
-    let isMounted = true;
-
-    const fetchResponses = async () => {
-      try {
-        const data = await reportService.getMyEmergencyResponses();
-        if (isMounted) {
-          setEmergencyResponses(data.responses || []);
-        }
-      } catch (err) {
-        console.error('Failed to fetch emergency responses:', err);
-      }
-    };
-
-    fetchResponses();
-
-    // Faster poll (10s) when there's an active response, slower (30s) otherwise
-    const hasActiveResponse = emergencyResponses.some(
-      (r) => !r.isResolved && !dismissedResponses.includes(r.id)
-    );
-    const interval = hasActiveResponse ? 10000 : 30000;
-
-    const intervalId = setInterval(fetchResponses, interval);
-
-    return () => {
-      isMounted = false;
-      clearInterval(intervalId);
-    };
-  }, [emergencyResponses, dismissedResponses]);
-
-  // ============================================
-  // Persist dismissals to localStorage
-  // ============================================
-  useEffect(() => {
-    try {
-      localStorage.setItem(
-        DISMISSED_RESPONSES_KEY,
-        JSON.stringify(dismissedResponses)
-      );
-    } catch (err) {
-      console.error('Failed to persist dismissed responses:', err);
-    }
-  }, [dismissedResponses]);
-
-  // ============================================
   // REFRESH ROUTE
   // ============================================
   const refreshRoute = async () => {
     setRefreshing(true);
     try {
       const data = await routeService.getTodaysRoute();
-      if (data && data.route) {
-        setRoute(data.route);
-      } else {
-        setRoute(null);
-      }
+      setRoute(data.route);
     } catch (err) {
       console.error('Refresh failed:', err);
     } finally {
@@ -283,56 +158,9 @@ export const DriverPortal: React.FC = () => {
   };
 
   // ============================================
-  // PHOTO VIEWER HANDLERS
+  // PHOTO HANDLING (AFTER ONLY)
   // ============================================
-  const openPhotoPreview = (photos: string[], index: number) => {
-    setPreviewPhotoList(photos);
-    setPreviewPhotoIndex(index);
-    setPreviewPhoto(photos[index]);
-  };
-
-  const closePhotoPreview = () => {
-    setPreviewPhoto(null);
-    setPreviewPhotoList([]);
-    setPreviewPhotoIndex(0);
-  };
-
-  const showNextPhoto = () => {
-    if (previewPhotoList.length === 0) return;
-    const nextIndex = (previewPhotoIndex + 1) % previewPhotoList.length;
-    setPreviewPhotoIndex(nextIndex);
-    setPreviewPhoto(previewPhotoList[nextIndex]);
-  };
-
-  const showPrevPhoto = () => {
-    if (previewPhotoList.length === 0) return;
-    const prevIndex =
-      (previewPhotoIndex - 1 + previewPhotoList.length) %
-      previewPhotoList.length;
-    setPreviewPhotoIndex(prevIndex);
-    setPreviewPhoto(previewPhotoList[prevIndex]);
-  };
-
-  // Keyboard navigation for photo viewer
-  useEffect(() => {
-    if (!previewPhoto) return;
-
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'ArrowRight') showNextPhoto();
-      if (e.key === 'ArrowLeft') showPrevPhoto();
-      if (e.key === 'Escape') closePhotoPreview();
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [previewPhoto, previewPhotoList, previewPhotoIndex]);
-
-  // ============================================
-  // PHOTO UPLOAD HANDLING (before/after)
-  // ============================================
-  const openPhotoDialog = (type: 'before' | 'after') => {
-    setPhotoType(type);
+  const openPhotoDialog = () => {
     setShowPhotoDialog(true);
   };
 
@@ -343,29 +171,17 @@ export const DriverPortal: React.FC = () => {
     const file = files[0];
     const previewUrl = URL.createObjectURL(file);
 
-    if (photoType === 'before') {
-      if (beforePhotoPreview) URL.revokeObjectURL(beforePhotoPreview);
-      setBeforePhotoFile(file);
-      setBeforePhotoPreview(previewUrl);
-    } else {
-      if (afterPhotoPreview) URL.revokeObjectURL(afterPhotoPreview);
-      setAfterPhotoFile(file);
-      setAfterPhotoPreview(previewUrl);
-    }
+    if (afterPhotoPreview) URL.revokeObjectURL(afterPhotoPreview);
+    setAfterPhotoFile(file);
+    setAfterPhotoPreview(previewUrl);
 
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
-  const removePhoto = (type: 'before' | 'after') => {
-    if (type === 'before') {
-      if (beforePhotoPreview) URL.revokeObjectURL(beforePhotoPreview);
-      setBeforePhotoFile(null);
-      setBeforePhotoPreview('');
-    } else {
-      if (afterPhotoPreview) URL.revokeObjectURL(afterPhotoPreview);
-      setAfterPhotoFile(null);
-      setAfterPhotoPreview('');
-    }
+  const removePhoto = () => {
+    if (afterPhotoPreview) URL.revokeObjectURL(afterPhotoPreview);
+    setAfterPhotoFile(null);
+    setAfterPhotoPreview('');
   };
 
   // ============================================
@@ -374,19 +190,10 @@ export const DriverPortal: React.FC = () => {
   const handleCompleteStop = async (stop: RouteStop) => {
     if (!route) return;
 
-    // ✅ Guard: Prevent duplicate in-flight requests
-    if (actionLoading) {
-      console.log(
-        '⏳ Complete stop request already in flight, skipping duplicate...'
-      );
-      return;
-    }
-
     if (stop.isComplaintStop) {
-      if (!beforePhotoFile || !afterPhotoFile) {
-        showSnackbar(
-          'Please take both "Before" and "After" photos for this complaint stop.',
-          'warning'
+      if (!afterPhotoFile) {
+        alert(
+          'Please take an "After" photo as proof of service for this complaint stop.'
         );
         return;
       }
@@ -394,61 +201,38 @@ export const DriverPortal: React.FC = () => {
 
     setActionLoading(true);
     try {
-      let beforePhotoUrl = '';
       let afterPhotoUrl = '';
 
-      if (stop.isComplaintStop && beforePhotoFile && afterPhotoFile) {
-        const uploadResult = await uploadService.uploadBeforeAfter(
-          beforePhotoFile,
-          afterPhotoFile
-        );
-        beforePhotoUrl = uploadResult.beforePhoto || '';
-        afterPhotoUrl = uploadResult.afterPhoto || '';
+      if (stop.isComplaintStop && afterPhotoFile) {
+        const uploadResult = await uploadService.uploadSingle(afterPhotoFile);
+        afterPhotoUrl = uploadResult.url;
       }
 
       const response = await routeService.completeStop(route.id, stop.id, {
-        beforePhoto: beforePhotoUrl || undefined,
         afterPhoto: afterPhotoUrl || undefined,
       });
 
-      if (stop.isComplaintStop) {
-        await refreshRoute();
-      } else {
-        setRoute((prev) => {
-          if (!prev || !prev.stops) return prev;
-          return {
-            ...prev,
-            completedStops: response.routeProgress.completedStops,
-            status: response.routeProgress.routeStatus,
-            stops: prev.stops.map((s) =>
-              s.id === stop.id ? response.stop : s
-            ),
-          };
-        });
-      }
+      setRoute((prev) => {
+        if (!prev || !prev.stops) return prev;
+        return {
+          ...prev,
+          completedStops: response.routeProgress.completedStops,
+          status: response.routeProgress.routeStatus,
+          stops: prev.stops.map((s) => (s.id === stop.id ? response.stop : s)),
+        };
+      });
 
-      removePhoto('before');
-      removePhoto('after');
+      removePhoto();
       setSelectedStop(null);
-      showSnackbar('Stop completed successfully.', 'success');
     } catch (err: unknown) {
       const error = err as {
-        response?: { status?: number; data?: { message?: string; error?: string } };
+        response?: { data?: { message?: string; error?: string } };
       };
-      const message =
+      alert(
         error.response?.data?.message ||
-        error.response?.data?.error ||
-        'Failed to complete stop. Please try again.';
-
-      // ✅ Better UX for 429 (rate limited)
-      if (error.response?.status === 429) {
-        showSnackbar(
-          'System is busy. Please wait a moment and try again.',
-          'warning'
-        );
-      } else {
-        showSnackbar(message, 'error');
-      }
+          error.response?.data?.error ||
+          'Failed to complete stop. Please try again.'
+      );
     } finally {
       setActionLoading(false);
     }
@@ -466,7 +250,7 @@ export const DriverPortal: React.FC = () => {
     if (!route || !selectedStop) return;
 
     if (!skipReason.trim()) {
-      showSnackbar('Please provide a reason for skipping', 'warning');
+      alert('Please provide a reason for skipping');
       return;
     }
 
@@ -491,107 +275,39 @@ export const DriverPortal: React.FC = () => {
       setShowSkipDialog(false);
       setSkipReason('');
       setSelectedStop(null);
-      showSnackbar('Stop skipped.', 'info');
     } catch (err: unknown) {
       const error = err as {
-        response?: { status?: number; data?: { message?: string; error?: string } };
+        response?: { data?: { message?: string; error?: string } };
       };
-      const message =
+      alert(
         error.response?.data?.message ||
-        error.response?.data?.error ||
-        'Failed to skip stop. Please try again.';
-
-      if (error.response?.status === 429) {
-        showSnackbar(
-          'System is busy. Please wait a moment and try again.',
-          'warning'
-        );
-      } else {
-        showSnackbar(message, 'error');
-      }
+          error.response?.data?.error ||
+          'Failed to skip stop. Please try again.'
+      );
     } finally {
       setActionLoading(false);
     }
   };
 
   // ============================================
-  // FETCH CURRENT GPS LOCATION FOR EMERGENCY
-  // ============================================
-  const fetchEmergencyLocation = (): Promise<{
-    latitude: number;
-    longitude: number;
-    accuracy?: number;
-  } | null> => {
-    return new Promise((resolve) => {
-      if (!navigator.geolocation) {
-        setLocationError('Geolocation is not supported');
-        resolve(null);
-        return;
-      }
-
-      setLocationFetching(true);
-      setLocationError('');
-
-      navigator.geolocation.getCurrentPosition(
-        (position) => {
-          const { latitude, longitude, accuracy } = position.coords;
-          setEmergencyLocation({ latitude, longitude, accuracy });
-          setLocationFetching(false);
-          resolve({ latitude, longitude, accuracy });
-        },
-        (err) => {
-          console.error('Geolocation error:', err);
-          setLocationError(
-            'Could not get precise GPS. Using last known stop location.'
-          );
-          setLocationFetching(false);
-          resolve(null);
-        },
-        {
-          enableHighAccuracy: true,
-          timeout: 10000,
-          maximumAge: 0,
-        }
-      );
-    });
-  };
-
-  // ============================================
   // EMERGENCY DISPATCH
   // ============================================
-  const handleOpenEmergencyDialog = async () => {
+  const handleOpenEmergencyDialog = () => {
     setEmergencyType('breakdown');
     setEmergencyDescription('');
-    setEmergencyLocation(null);
-    setLocationError('');
     setOpenEmergencyDialog(true);
-
-    await fetchEmergencyLocation();
   };
 
   const handleSendEmergency = async () => {
     setEmergencySubmitting(true);
     try {
-      let latitude: number;
-      let longitude: number;
-      let locationSource = '';
-
-      if (emergencyLocation) {
-        latitude = emergencyLocation.latitude;
-        longitude = emergencyLocation.longitude;
-        locationSource = `Live GPS (±${Math.round(
-          emergencyLocation.accuracy || 0
-        )}m)`;
-      } else {
-        const currentStop = route?.stops?.find((s) => s.status === 'pending');
-        latitude = currentStop?.latitude
-          ? Number(currentStop.latitude)
-          : -9.4438;
-        longitude = currentStop?.longitude
-          ? Number(currentStop.longitude)
-          : 147.1803;
-        locationSource = 'Last known route stop';
-      }
+      const currentStop = route?.stops?.find((s) => s.status === 'pending');
+      const latitude = currentStop?.latitude
+        ? Number(currentStop.latitude)
+        : -9.4438;
+      const longitude = currentStop?.longitude
+        ? Number(currentStop.longitude)
+        : 147.1803;
 
       await reportService.createEmergencyAlert({
         emergencyType:
@@ -603,29 +319,16 @@ export const DriverPortal: React.FC = () => {
       });
 
       setOpenEmergencyDialog(false);
-      showSnackbar(
-        `🚨 Emergency alert sent! Location: ${latitude.toFixed(
-          6
-        )}, ${longitude.toFixed(6)} (${locationSource})`,
-        'success'
-      );
+      alert('🚨 Emergency alert sent to dispatch successfully!');
     } catch (err: unknown) {
       const error = err as {
-        response?: { status?: number; data?: { message?: string; error?: string } };
+        response?: { data?: { message?: string; error?: string } };
       };
-      const message =
+      alert(
         error.response?.data?.message ||
-        error.response?.data?.error ||
-        'Failed to send emergency alert. Please try calling dispatch directly.';
-
-      if (error.response?.status === 429) {
-        showSnackbar(
-          'System is busy. Please wait a moment and try again.',
-          'warning'
-        );
-      } else {
-        showSnackbar(message, 'error');
-      }
+          error.response?.data?.error ||
+          'Failed to send emergency alert. Please try calling dispatch directly.'
+      );
     } finally {
       setEmergencySubmitting(false);
     }
@@ -659,11 +362,6 @@ export const DriverPortal: React.FC = () => {
         return 'info';
     }
   };
-
-  // Only show responses that are not dismissed and not resolved
-  const activeResponses = emergencyResponses.filter(
-    (r) => !dismissedResponses.includes(r.id) && !r.isResolved
-  );
 
   // ============================================
   // LOADING / ERROR
@@ -702,50 +400,6 @@ export const DriverPortal: React.FC = () => {
   return (
     <Container maxWidth="xl" sx={{ py: 4 }}>
       <Grid container spacing={3}>
-        {/* ADMIN RESPONSES TO EMERGENCY ALERTS */}
-        {activeResponses.map((response) => (
-          <Grid size={{ xs: 12 }} key={response.id}>
-            <Alert
-              severity="success"
-              icon={<CheckCircle />}
-              onClose={() =>
-                setDismissedResponses((prev) => [...prev, response.id])
-              }
-              sx={{
-                border: '2px solid',
-                borderColor: 'success.main',
-                '& .MuiAlert-message': { width: '100%' },
-              }}
-            >
-              <Box
-                sx={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'flex-start',
-                  flexWrap: 'wrap',
-                  gap: 1,
-                }}
-              >
-                <Box sx={{ flex: 1 }}>
-                  <Typography variant="subtitle1" sx={{ fontWeight: 'bold' }}>
-                    📨 Response from Dispatch
-                  </Typography>
-                  <Typography variant="body2" sx={{ mt: 0.5 }}>
-                    {response.adminResponse}
-                  </Typography>
-                  <Typography
-                    variant="caption"
-                    color="text.secondary"
-                    sx={{ display: 'block', mt: 1 }}
-                  >
-                    Responded: {new Date(response.respondedAt).toLocaleString()}
-                  </Typography>
-                </Box>
-              </Box>
-            </Alert>
-          </Grid>
-        ))}
-
         {/* Header */}
         <Grid size={{ xs: 12 }}>
           <Paper sx={{ p: 3, bgcolor: 'primary.main', color: 'white' }}>
@@ -831,7 +485,10 @@ export const DriverPortal: React.FC = () => {
                 {route.stops?.map((stop, index) => (
                   <ListItem
                     key={stop.id}
-                    onClick={() => setSelectedStop(stop)}
+                    onClick={() => {
+                      setSelectedStop(stop);
+                      removePhoto();
+                    }}
                     sx={{
                       cursor: 'pointer',
                       borderLeft: `4px solid ${
@@ -877,17 +534,6 @@ export const DriverPortal: React.FC = () => {
                               variant="outlined"
                             />
                           )}
-                          {stop.reportComments &&
-                            stop.reportComments.length > 0 && (
-                              <Chip
-                                icon={<ChatBubbleOutlineOutlined />}
-                                label={`${stop.reportComments.length}`}
-                                size="small"
-                                color="primary"
-                                variant="outlined"
-                                sx={{ height: 20 }}
-                              />
-                            )}
                         </Box>
                       }
                       secondary={
@@ -900,7 +546,7 @@ export const DriverPortal: React.FC = () => {
                         </Typography>
                       }
                     />
-                    {stop.status === 'pending' && !stop.isComplaintStop && (
+                    {stop.status === 'pending' && (
                       <Button
                         variant="contained"
                         size="small"
@@ -956,181 +602,6 @@ export const DriverPortal: React.FC = () => {
                       }
                     />
 
-                    {/* Admin Comments for Complaint Stops */}
-                    {selectedStop.isComplaintStop &&
-                      selectedStop.reportComments &&
-                      selectedStop.reportComments.length > 0 && (
-                        <>
-                          <Divider sx={{ my: 2 }} />
-                          <Box
-                            sx={{
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: 1,
-                              mb: 1,
-                            }}
-                          >
-                            <ChatBubbleOutlineOutlined
-                              color="primary"
-                              fontSize="small"
-                            />
-                            <Typography
-                              variant="subtitle2"
-                              color="primary"
-                              sx={{ fontWeight: 600 }}
-                            >
-                              Admin Comments (
-                              {selectedStop.reportComments.length})
-                            </Typography>
-                          </Box>
-
-                          <Box
-                            sx={{
-                              bgcolor: 'primary.50',
-                              borderLeft: '3px solid',
-                              borderColor: 'primary.main',
-                              borderRadius: 1,
-                              p: 2,
-                              mb: 2,
-                            }}
-                          >
-                            {selectedStop.reportComments.map(
-                              (comment: ReportCommentSummary) => (
-                                <Box
-                                  key={comment.id}
-                                  sx={{
-                                    mb: 1.5,
-                                    '&:last-child': { mb: 0 },
-                                  }}
-                                >
-                                  <Box
-                                    sx={{
-                                      display: 'flex',
-                                      alignItems: 'center',
-                                      gap: 1,
-                                      mb: 0.5,
-                                    }}
-                                  >
-                                    <Avatar
-                                      sx={{
-                                        width: 24,
-                                        height: 24,
-                                        bgcolor: 'primary.main',
-                                        fontSize: '0.75rem',
-                                      }}
-                                    >
-                                      {comment.authorName
-                                        .charAt(0)
-                                        .toUpperCase()}
-                                    </Avatar>
-                                    <Typography
-                                      variant="caption"
-                                      sx={{ fontWeight: 600 }}
-                                    >
-                                      {comment.authorName}
-                                    </Typography>
-                                    <Chip
-                                      label={comment.authorRole.toUpperCase()}
-                                      size="small"
-                                      color="primary"
-                                      variant="outlined"
-                                      sx={{ height: 18, fontSize: '0.65rem' }}
-                                    />
-                                  </Box>
-                                  <Typography
-                                    variant="body2"
-                                    sx={{ ml: 4, color: 'text.primary' }}
-                                  >
-                                    {comment.content}
-                                  </Typography>
-                                  <Typography
-                                    variant="caption"
-                                    color="text.secondary"
-                                    sx={{ ml: 4, display: 'block', mt: 0.25 }}
-                                  >
-                                    {new Date(
-                                      comment.createdAt
-                                    ).toLocaleString()}
-                                  </Typography>
-                                </Box>
-                              )
-                            )}
-                          </Box>
-                        </>
-                      )}
-
-                    {/* Report Photos (Citizen-submitted) */}
-                    {selectedStop.isComplaintStop &&
-                      selectedStop.reportPhotos &&
-                      selectedStop.reportPhotos.length > 0 && (
-                        <>
-                          <Divider sx={{ my: 2 }} />
-                          <Box
-                            sx={{
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: 1,
-                              mb: 1,
-                            }}
-                          >
-                            <PhotoCamera color="primary" fontSize="small" />
-                            <Typography
-                              variant="subtitle2"
-                              color="primary"
-                              sx={{ fontWeight: 600 }}
-                            >
-                              Report Photos ({selectedStop.reportPhotos.length})
-                            </Typography>
-                          </Box>
-
-                          <Typography
-                            variant="caption"
-                            color="text.secondary"
-                            sx={{ display: 'block', mb: 1 }}
-                          >
-                            Photos submitted by the citizen — click to enlarge
-                          </Typography>
-
-                          <ImageList
-                            cols={3}
-                            rowHeight={100}
-                            sx={{ mt: 1, mb: 2 }}
-                          >
-                            {selectedStop.reportPhotos.map((photo, idx) => (
-                              <ImageListItem
-                                key={idx}
-                                onClick={() =>
-                                  openPhotoPreview(
-                                    selectedStop.reportPhotos!,
-                                    idx
-                                  )
-                                }
-                                sx={{
-                                  cursor: 'pointer',
-                                  transition: 'transform 0.2s',
-                                  '&:hover': {
-                                    transform: 'scale(1.05)',
-                                    boxShadow: 3,
-                                  },
-                                }}
-                              >
-                                <img
-                                  src={photo}
-                                  alt={`Report photo ${idx + 1}`}
-                                  loading="lazy"
-                                  style={{
-                                    borderRadius: 8,
-                                    objectFit: 'cover',
-                                    width: '100%',
-                                    height: '100%',
-                                  }}
-                                />
-                              </ImageListItem>
-                            ))}
-                          </ImageList>
-                        </>
-                      )}
-
                     {selectedStop.isComplaintStop && (
                       <Alert
                         severity={
@@ -1145,7 +616,7 @@ export const DriverPortal: React.FC = () => {
                           variant="caption"
                           sx={{ display: 'block', mt: 0.5 }}
                         >
-                          Before & After photos required for this stop.
+                          An "After" photo is required as proof of service.
                         </Typography>
                       </Alert>
                     )}
@@ -1155,9 +626,7 @@ export const DriverPortal: React.FC = () => {
                         Quick Actions
                       </Typography>
                       <Grid container spacing={1} sx={{ mt: 1 }}>
-                        <Grid
-                          size={{ xs: selectedStop.isComplaintStop ? 6 : 12 }}
-                        >
+                        <Grid size={{ xs: 12 }}>
                           <Button
                             variant="outlined"
                             fullWidth
@@ -1171,126 +640,67 @@ export const DriverPortal: React.FC = () => {
 
                         {selectedStop.isComplaintStop &&
                           selectedStop.status !== 'completed' && (
-                            <>
-                              <Grid size={{ xs: 6 }}>
-                                <Button
-                                  variant={
-                                    beforePhotoFile ? 'contained' : 'outlined'
-                                  }
-                                  fullWidth
-                                  size="small"
-                                  startIcon={<PhotoCamera />}
-                                  onClick={() => openPhotoDialog('before')}
-                                  color={beforePhotoFile ? 'success' : 'primary'}
-                                >
-                                  {beforePhotoFile ? '✅ Before' : '📸 Before'}
-                                </Button>
-                              </Grid>
-                              <Grid size={{ xs: 6 }}>
-                                <Button
-                                  variant={
-                                    afterPhotoFile ? 'contained' : 'outlined'
-                                  }
-                                  fullWidth
-                                  size="small"
-                                  startIcon={<PhotoCamera />}
-                                  onClick={() => openPhotoDialog('after')}
-                                  color={afterPhotoFile ? 'success' : 'primary'}
-                                >
-                                  {afterPhotoFile ? '✅ After' : '📸 After'}
-                                </Button>
-                              </Grid>
-                            </>
+                            <Grid size={{ xs: 12 }}>
+                              <Button
+                                variant={
+                                  afterPhotoFile ? 'contained' : 'outlined'
+                                }
+                                fullWidth
+                                startIcon={<PhotoCamera />}
+                                onClick={openPhotoDialog}
+                                color={afterPhotoFile ? 'success' : 'primary'}
+                              >
+                                {afterPhotoFile
+                                  ? '✅ After Photo Captured'
+                                  : '📸 Take After Photo'}
+                              </Button>
+                            </Grid>
                           )}
                       </Grid>
 
+                      {/* After photo preview */}
                       {selectedStop.isComplaintStop &&
-                        selectedStop.status !== 'completed' && (
+                        selectedStop.status !== 'completed' &&
+                        afterPhotoPreview && (
                           <Box sx={{ mt: 2 }}>
-                            {beforePhotoPreview && (
-                              <Box sx={{ mb: 1 }}>
-                                <Typography
-                                  variant="caption"
-                                  color="text.secondary"
-                                >
-                                  Before Photo:
-                                </Typography>
-                                <Box
-                                  sx={{
-                                    position: 'relative',
-                                    width: 100,
-                                    height: 100,
-                                    mt: 1,
-                                  }}
-                                >
-                                  <img
-                                    src={beforePhotoPreview}
-                                    alt="Before"
-                                    style={{
-                                      width: '100%',
-                                      height: '100%',
-                                      objectFit: 'cover',
-                                      borderRadius: 8,
-                                    }}
-                                  />
-                                  <IconButton
-                                    size="small"
-                                    sx={{
-                                      position: 'absolute',
-                                      top: 2,
-                                      right: 2,
-                                      bgcolor: 'rgba(0,0,0,0.6)',
-                                      color: 'white',
-                                    }}
-                                    onClick={() => removePhoto('before')}
-                                  >
-                                    <Delete sx={{ fontSize: 14 }} />
-                                  </IconButton>
-                                </Box>
-                              </Box>
-                            )}
-                            {afterPhotoPreview && (
-                              <Box>
-                                <Typography
-                                  variant="caption"
-                                  color="text.secondary"
-                                >
-                                  After Photo:
-                                </Typography>
-                                <Box
-                                  sx={{
-                                    position: 'relative',
-                                    width: 100,
-                                    height: 100,
-                                    mt: 1,
-                                  }}
-                                >
-                                  <img
-                                    src={afterPhotoPreview}
-                                    alt="After"
-                                    style={{
-                                      width: '100%',
-                                      height: '100%',
-                                      objectFit: 'cover',
-                                      borderRadius: 8,
-                                    }}
-                                  />
-                                  <IconButton
-                                    size="small"
-                                    sx={{
-                                      position: 'absolute',
-                                      top: 2,
-                                      right: 2,
-                                      bgcolor: 'rgba(0,0,0,0.6)',
-                                      color: 'white',
-                                    }}
-                                    onClick={() => removePhoto('after')}
-                                  >
-                                    <Delete sx={{ fontSize: 14 }} />
-                                  </IconButton>
-                                </Box>
-                              </Box>
-                            )}
+                            <Typography
+                              variant="caption"
+                              color="text.secondary"
+                            >
+                              After Photo:
+                            </Typography>
+                            <Box
+                              sx={{
+                                position: 'relative',
+                                width: 100,
+                                height: 100,
+                                mt: 1,
+                              }}
+                            >
+                              <img
+                                src={afterPhotoPreview}
+                                alt="After"
+                                style={{
+                                  width: '100%',
+                                  height: '100%',
+                                  objectFit: 'cover',
+                                  borderRadius: 8,
+                                }}
+                              />
+                              <IconButton
+                                size="small"
+                                sx={{
+                                  position: 'absolute',
+                                  top: 2,
+                                  right: 2,
+                                  bgcolor: 'rgba(0,0,0,0.6)',
+                                  color: 'white',
+                                }}
+                                onClick={removePhoto}
+                              >
+                                <Delete sx={{ fontSize: 14 }} />
+                              </IconButton>
+                            </Box>
                           </Box>
                         )}
 
@@ -1308,16 +718,14 @@ export const DriverPortal: React.FC = () => {
                         disabled={
                           actionLoading ||
                           selectedStop.status === 'completed' ||
-                          (selectedStop.isComplaintStop &&
-                            (!beforePhotoFile || !afterPhotoFile))
+                          (selectedStop.isComplaintStop && !afterPhotoFile)
                         }
                         sx={{ mt: 2 }}
                       >
                         {actionLoading
                           ? 'Processing...'
-                          : selectedStop.isComplaintStop &&
-                            (!beforePhotoFile || !afterPhotoFile)
-                          ? '📸 Take Both Photos First'
+                          : selectedStop.isComplaintStop && !afterPhotoFile
+                          ? '📸 Take After Photo First'
                           : selectedStop.status === 'completed'
                           ? '✅ Completed'
                           : 'Complete Stop'}
@@ -1347,8 +755,8 @@ export const DriverPortal: React.FC = () => {
                       }}
                     >
                       <Typography variant="caption" color="text.secondary">
-                        💡 Tip: Before & After photos are required for all
-                        complaint stops
+                        💡 Tip: An "After" photo is required for all complaint
+                        stops as proof of service.
                       </Typography>
                     </Box>
                   </Box>
@@ -1368,33 +776,23 @@ export const DriverPortal: React.FC = () => {
         </Grid>
       </Grid>
 
-      {/* Photo Upload Dialog */}
+      {/* Photo Upload Dialog — After Only */}
       <Dialog
         open={showPhotoDialog}
         onClose={() => setShowPhotoDialog(false)}
         maxWidth="sm"
         fullWidth
       >
-        <DialogTitle>
-          {photoType === 'before'
-            ? '📸 Take "Before" Photo'
-            : '📸 Take "After" Photo'}
-        </DialogTitle>
+        <DialogTitle>📸 Take "After" Photo</DialogTitle>
         <DialogContent>
           <Box sx={{ py: 2 }}>
             <Typography variant="body2" color="text.secondary" gutterBottom>
-              {photoType === 'before'
-                ? 'Take a photo showing the site BEFORE collection.'
-                : 'Take a photo showing the site AFTER collection.'}
+              Take a photo showing the site AFTER collection.
             </Typography>
 
-            <Alert
-              severity={photoType === 'before' ? 'warning' : 'success'}
-              sx={{ mt: 1, mb: 2 }}
-            >
-              {photoType === 'before'
-                ? 'This photo serves as evidence of the reported issue'
-                : 'This photo confirms the issue has been resolved'}
+            <Alert severity="success" sx={{ mt: 1, mb: 2 }}>
+              This photo confirms the issue has been resolved and serves as
+              proof of service.
             </Alert>
 
             <Box sx={{ mb: 2 }}>
@@ -1419,20 +817,7 @@ export const DriverPortal: React.FC = () => {
               </label>
             </Box>
 
-            {photoType === 'before' && beforePhotoPreview && (
-              <Box sx={{ textAlign: 'center' }}>
-                <img
-                  src={beforePhotoPreview}
-                  alt="Before preview"
-                  style={{
-                    maxWidth: '100%',
-                    maxHeight: 300,
-                    borderRadius: 8,
-                  }}
-                />
-              </Box>
-            )}
-            {photoType === 'after' && afterPhotoPreview && (
+            {afterPhotoPreview && (
               <Box sx={{ textAlign: 'center' }}>
                 <img
                   src={afterPhotoPreview}
@@ -1503,8 +888,8 @@ export const DriverPortal: React.FC = () => {
         </DialogTitle>
         <DialogContent sx={{ pt: 3 }}>
           <Alert severity="warning" sx={{ mb: 3 }}>
-            This will immediately notify dispatch. Your truck's current GPS
-            location will be shared automatically.
+            This will immediately notify dispatch and the administrator. Only
+            use in genuine emergencies.
           </Alert>
 
           <FormControl fullWidth sx={{ mb: 2 }}>
@@ -1530,89 +915,7 @@ export const DriverPortal: React.FC = () => {
             value={emergencyDescription}
             onChange={(e) => setEmergencyDescription(e.target.value)}
             placeholder="Describe the situation briefly..."
-            sx={{ mb: 2 }}
           />
-
-          <Paper
-            variant="outlined"
-            sx={{
-              p: 2,
-              bgcolor: locationError ? 'warning.50' : 'success.50',
-              borderColor: locationError ? 'warning.main' : 'success.main',
-            }}
-          >
-            <Box
-              sx={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 1,
-                mb: 1,
-              }}
-            >
-              <MyLocationIcon
-                color={locationError ? 'warning' : 'success'}
-                fontSize="small"
-              />
-              <Typography
-                variant="subtitle2"
-                sx={{ fontWeight: 600 }}
-                color={locationError ? 'warning.main' : 'success.main'}
-              >
-                Truck GPS Location
-              </Typography>
-              {locationFetching && (
-                <CircularProgress size={14} sx={{ ml: 'auto' }} />
-              )}
-            </Box>
-
-            {locationFetching ? (
-              <Typography variant="caption" color="text.secondary">
-                Getting precise GPS position...
-              </Typography>
-            ) : emergencyLocation ? (
-              <>
-                <Typography
-                  variant="body2"
-                  sx={{ fontFamily: 'monospace', fontWeight: 600 }}
-                >
-                  📍 {emergencyLocation.latitude.toFixed(6)},{' '}
-                  {emergencyLocation.longitude.toFixed(6)}
-                </Typography>
-                <Typography
-                  variant="caption"
-                  color="text.secondary"
-                  sx={{ display: 'block', mt: 0.5 }}
-                >
-                  Accuracy: ±{Math.round(emergencyLocation.accuracy || 0)}m
-                </Typography>
-                <Button
-                  size="small"
-                  startIcon={<Refresh />}
-                  onClick={fetchEmergencyLocation}
-                  disabled={locationFetching}
-                  sx={{ mt: 1 }}
-                >
-                  Refresh Location
-                </Button>
-              </>
-            ) : (
-              <>
-                <Typography variant="caption" color="warning.main">
-                  {locationError ||
-                    'Could not get GPS. Will use last known route stop.'}
-                </Typography>
-                <Button
-                  size="small"
-                  startIcon={<Refresh />}
-                  onClick={fetchEmergencyLocation}
-                  disabled={locationFetching}
-                  sx={{ mt: 1, display: 'block' }}
-                >
-                  Retry GPS
-                </Button>
-              </>
-            )}
-          </Paper>
         </DialogContent>
         <DialogActions sx={{ p: 2 }}>
           <Button
@@ -1625,7 +928,7 @@ export const DriverPortal: React.FC = () => {
             variant="contained"
             color="error"
             onClick={handleSendEmergency}
-            disabled={emergencySubmitting || locationFetching}
+            disabled={emergencySubmitting}
             startIcon={
               emergencySubmitting ? (
                 <CircularProgress size={20} color="inherit" />
@@ -1636,126 +939,6 @@ export const DriverPortal: React.FC = () => {
           >
             {emergencySubmitting ? 'Sending...' : 'Send Emergency Alert'}
           </Button>
-        </DialogActions>
-      </Dialog>
-
-      {/* Enhanced Photo Preview Dialog with Navigation */}
-      <Dialog
-        open={!!previewPhoto}
-        onClose={closePhotoPreview}
-        maxWidth="lg"
-        fullWidth
-        slotProps={{
-          paper: {
-            sx: {
-              bgcolor: 'rgba(0,0,0,0.95)',
-              backgroundImage: 'none',
-            },
-          },
-        }}
-      >
-        <DialogTitle
-          sx={{
-            color: 'white',
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-          }}
-        >
-          <Typography variant="h6" sx={{ color: 'white' }}>
-            Report Photo
-            {previewPhotoList.length > 1 && (
-              <Typography
-                component="span"
-                variant="body2"
-                sx={{ ml: 2, opacity: 0.7 }}
-              >
-                {previewPhotoIndex + 1} of {previewPhotoList.length}
-              </Typography>
-            )}
-          </Typography>
-          <IconButton onClick={closePhotoPreview} sx={{ color: 'white' }}>
-            <CloseIcon />
-          </IconButton>
-        </DialogTitle>
-        <DialogContent
-          sx={{
-            display: 'flex',
-            justifyContent: 'center',
-            alignItems: 'center',
-            p: 2,
-            position: 'relative',
-            minHeight: 400,
-          }}
-        >
-          {/* Previous arrow */}
-          {previewPhotoList.length > 1 && (
-            <IconButton
-              onClick={showPrevPhoto}
-              sx={{
-                position: 'absolute',
-                left: 16,
-                color: 'white',
-                bgcolor: 'rgba(255,255,255,0.15)',
-                '&:hover': { bgcolor: 'rgba(255,255,255,0.3)' },
-                zIndex: 2,
-              }}
-            >
-              <ChevronLeftIcon fontSize="large" />
-            </IconButton>
-          )}
-
-          {previewPhoto && (
-            <img
-              src={previewPhoto}
-              alt="Enlarged preview"
-              style={{
-                maxWidth: '100%',
-                maxHeight: '80vh',
-                objectFit: 'contain',
-                borderRadius: 4,
-              }}
-            />
-          )}
-
-          {/* Next arrow */}
-          {previewPhotoList.length > 1 && (
-            <IconButton
-              onClick={showNextPhoto}
-              sx={{
-                position: 'absolute',
-                right: 16,
-                color: 'white',
-                bgcolor: 'rgba(255,255,255,0.15)',
-                '&:hover': { bgcolor: 'rgba(255,255,255,0.3)' },
-                zIndex: 2,
-              }}
-            >
-              <ChevronRightIcon fontSize="large" />
-            </IconButton>
-          )}
-        </DialogContent>
-        <DialogActions
-          sx={{ justifyContent: 'center', pb: 2, gap: 1 }}
-        >
-          {previewPhotoList.length > 1 && (
-            <>
-              <Button
-                onClick={showPrevPhoto}
-                sx={{ color: 'white' }}
-                startIcon={<ChevronLeftIcon />}
-              >
-                Previous
-              </Button>
-              <Button
-                onClick={showNextPhoto}
-                sx={{ color: 'white' }}
-                endIcon={<ChevronRightIcon />}
-              >
-                Next
-              </Button>
-            </>
-          )}
         </DialogActions>
       </Dialog>
 
@@ -1778,22 +961,6 @@ export const DriverPortal: React.FC = () => {
       >
         <Warning />
       </Fab>
-
-      {/* ✅ Global Snackbar — replaces all browser alert() calls */}
-      <Snackbar
-        open={snackbarOpen}
-        autoHideDuration={6000}
-        onClose={() => setSnackbarOpen(false)}
-        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
-      >
-        <Alert
-          onClose={() => setSnackbarOpen(false)}
-          severity={snackbarSeverity}
-          sx={{ width: '100%' }}
-        >
-          {snackbarMessage}
-        </Alert>
-      </Snackbar>
     </Container>
   );
 };
