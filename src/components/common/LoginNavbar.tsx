@@ -10,16 +10,16 @@ import {
   Menu,
   MenuItem,
 } from '@mui/material';
-import { Menu as MenuIcon, Home, } from '@mui/icons-material';
-import { useAuth } from '../../Context/AuthContext';
+import { Menu as MenuIcon, Home } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 
 interface LoginNavbarProps {
   title?: string;
 }
 
-export const LoginNavbar: React.FC<LoginNavbarProps> = ({ title = 'CleanTrack' }) => {
-  const { user } = useAuth();
+export const LoginNavbar: React.FC<LoginNavbarProps> = ({
+  title = 'CleanTrack',
+}) => {
   const navigate = useNavigate();
   const theme = useTheme();
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
@@ -33,9 +33,9 @@ export const LoginNavbar: React.FC<LoginNavbarProps> = ({ title = 'CleanTrack' }
   };
 
   return (
-    <AppBar 
-      position="sticky" 
-      sx={{ 
+    <AppBar
+      position="sticky"
+      sx={{
         bgcolor: theme.palette.primary.main,
         boxShadow: 'none',
         borderBottom: '1px solid rgba(255,255,255,0.1)',
@@ -45,9 +45,9 @@ export const LoginNavbar: React.FC<LoginNavbarProps> = ({ title = 'CleanTrack' }
         <Toolbar sx={{ justifyContent: 'center', py: 1, position: 'relative' }}>
           {/* Left Section - Hamburger Menu */}
           <Box sx={{ position: 'absolute', left: 0 }}>
-            <IconButton 
-              color="inherit" 
-              edge="start" 
+            <IconButton
+              color="inherit"
+              edge="start"
               onClick={handleMenuOpen}
               sx={{ color: 'white' }}
             >
@@ -55,14 +55,13 @@ export const LoginNavbar: React.FC<LoginNavbarProps> = ({ title = 'CleanTrack' }
             </IconButton>
           </Box>
 
-          {/* Center Section - Title (Plain - No Link) */}
+          {/* Center Section - Title */}
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
             <Typography
               variant="h6"
               sx={{
                 fontWeight: 700,
                 color: 'white',
-                // Removed cursor: 'pointer' and onClick
               }}
             >
               🌍 {title}
@@ -77,10 +76,10 @@ export const LoginNavbar: React.FC<LoginNavbarProps> = ({ title = 'CleanTrack' }
             anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}
             transformOrigin={{ vertical: 'top', horizontal: 'left' }}
           >
-            <MenuItem 
-              onClick={() => { 
-                navigate('/'); 
-                handleMenuClose(); 
+            <MenuItem
+              onClick={() => {
+                navigate('/');
+                handleMenuClose();
               }}
             >
               <Home sx={{ mr: 1 }} /> Home
@@ -91,3 +90,5 @@ export const LoginNavbar: React.FC<LoginNavbarProps> = ({ title = 'CleanTrack' }
     </AppBar>
   );
 };
+
+export default LoginNavbar;

@@ -247,8 +247,9 @@ export const CitizenProfile: React.FC = () => {
               flexWrap: 'wrap',
             }}
           >
+            {/* ✅ FIXED: Use `|| undefined` so MUI's Avatar doesn't complain about null */}
             <Avatar
-              src={user.avatar}
+              src={user.avatar || undefined}
               sx={{
                 width: 100,
                 height: 100,

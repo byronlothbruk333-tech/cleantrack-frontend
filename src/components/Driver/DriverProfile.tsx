@@ -33,10 +33,7 @@ import {
   Schedule,
 } from '@mui/icons-material';
 import { useAuth } from '../../Context/AuthContext';
-import {
-  routeService,
-  type Route,
-} from '../../Services/routeService';
+import { routeService, type Route } from '../../Services/routeService';
 import { truckService, type Truck } from '../../Services/truckService';
 
 // ============================================
@@ -77,7 +74,6 @@ export const DriverProfile: React.FC = () => {
       setError('');
 
       try {
-        // Fetch today's route and assigned truck in parallel
         const [routeResult, truckResult] = await Promise.allSettled([
           routeService.getTodaysRoute(),
           truckService.getAllTrucks(),
@@ -89,7 +85,6 @@ export const DriverProfile: React.FC = () => {
         if (routeResult.status === 'fulfilled') {
           setRoute(routeResult.value.route);
         } else {
-          // Route not found is not an error — just means no route today
           console.info('No route scheduled for today');
         }
 
@@ -207,8 +202,9 @@ export const DriverProfile: React.FC = () => {
               flexWrap: 'wrap',
             }}
           >
+            {/* ✅ FIXED: `|| undefined` prevents MUI's null type error */}
             <Avatar
-              src={user.avatar}
+              src={user.avatar || undefined}
               sx={{
                 width: 100,
                 height: 100,

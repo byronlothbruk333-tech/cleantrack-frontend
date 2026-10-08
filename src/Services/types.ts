@@ -10,6 +10,7 @@ export interface User {
   phone?: string | null;
   address?: string | null;
   zone?: string | null;
+   bio?: string | null;
   emailNotifications?: boolean;
   smsNotifications?: boolean;
   deleted?: boolean;
