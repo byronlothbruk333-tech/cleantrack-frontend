@@ -32,11 +32,18 @@ export interface RouteStop {
   reportId?: string | null;
   beforePhoto?: string | null;
   afterPhoto?: string | null;
-  // ✅ Comments from admin (feature #2/#3)
-  reportComments?: ReportCommentSummary[];
-  // ✅ Photos from the original citizen's report (feature #3)
+
+  // ✅ NEW: Report data attached for complaint stops
   reportPhotos?: string[];
-  // ✅ Admin's written response to the reporter (feature #4)
+  reportDescription?: string | null;
+  reportIssueType?: string | null;
+  reportComments?: Array<{
+    id: string;
+    content: string;
+    createdAt: string;
+    authorName: string;
+    authorRole: string;
+  }>;
   reportAdminResponse?: string | null;
   reportAdminRespondedAt?: string | null;
 }

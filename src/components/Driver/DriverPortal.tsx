@@ -47,6 +47,8 @@ import {
   ChatBubbleOutlineOutlined,
   Close as CloseIcon,
   MyLocation as MyLocationIcon,
+  ChevronLeft as ChevronLeftIcon,
+  ChevronRight as ChevronRightIcon,
 } from '@mui/icons-material';
 import {
   routeService,
@@ -85,8 +87,10 @@ export const DriverPortal: React.FC = () => {
   const [showSkipDialog, setShowSkipDialog] = useState(false);
   const [skipReason, setSkipReason] = useState('');
 
-  // Photo preview state
+  // Photo preview state (with navigation)
   const [previewPhoto, setPreviewPhoto] = useState<string | null>(null);
+  const [previewPhotoIndex, setPreviewPhotoIndex] = useState(0);
+  const [previewPhotoList, setPreviewPhotoList] = useState<string[]>([]);
 
   // Photo dialog state
   const [showPhotoDialog, setShowPhotoDialog] = useState(false);
@@ -125,7 +129,7 @@ export const DriverPortal: React.FC = () => {
     }>
   >([]);
 
-  // ✅ #6: Dismissed responses persisted to localStorage
+  // Dismissed responses persisted to localStorage
   const [dismissedResponses, setDismissedResponses] = useState<string[]>(
     () => {
       try {
@@ -179,7 +183,6 @@ export const DriverPortal: React.FC = () => {
 
   // ============================================
   // POLL FOR ADMIN RESPONSES TO MY EMERGENCY ALERTS
-  // ✅ #6: Faster poll (10s) when there are active responses, slower (30s) otherwise
   // ============================================
   useEffect(() => {
     let isMounted = true;
@@ -197,7 +200,7 @@ export const DriverPortal: React.FC = () => {
 
     fetchResponses();
 
-    // Determine poll speed: 10s if there's an active response, else 30s
+    // Faster poll (10s) when there's an active response, slower (30s) otherwise
     const hasActiveResponse = emergencyResponses.some(
       (r) => !r.isResolved && !dismissedResponses.includes(r.id)
     );
@@ -212,7 +215,7 @@ export const DriverPortal: React.FC = () => {
   }, [emergencyResponses, dismissedResponses]);
 
   // ============================================
-  // ✅ #6: Persist dismissals to localStorage
+  // Persist dismissals to localStorage
   // ============================================
   useEffect(() => {
     try {
@@ -261,7 +264,53 @@ export const DriverPortal: React.FC = () => {
   };
 
   // ============================================
-  // PHOTO HANDLING
+  // PHOTO VIEWER HANDLERS
+  // ============================================
+  const openPhotoPreview = (photos: string[], index: number) => {
+    setPreviewPhotoList(photos);
+    setPreviewPhotoIndex(index);
+    setPreviewPhoto(photos[index]);
+  };
+
+  const closePhotoPreview = () => {
+    setPreviewPhoto(null);
+    setPreviewPhotoList([]);
+    setPreviewPhotoIndex(0);
+  };
+
+  const showNextPhoto = () => {
+    if (previewPhotoList.length === 0) return;
+    const nextIndex = (previewPhotoIndex + 1) % previewPhotoList.length;
+    setPreviewPhotoIndex(nextIndex);
+    setPreviewPhoto(previewPhotoList[nextIndex]);
+  };
+
+  const showPrevPhoto = () => {
+    if (previewPhotoList.length === 0) return;
+    const prevIndex =
+      (previewPhotoIndex - 1 + previewPhotoList.length) %
+      previewPhotoList.length;
+    setPreviewPhotoIndex(prevIndex);
+    setPreviewPhoto(previewPhotoList[prevIndex]);
+  };
+
+  // Keyboard navigation for photo viewer
+  useEffect(() => {
+    if (!previewPhoto) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'ArrowRight') showNextPhoto();
+      if (e.key === 'ArrowLeft') showPrevPhoto();
+      if (e.key === 'Escape') closePhotoPreview();
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [previewPhoto, previewPhotoList, previewPhotoIndex]);
+
+  // ============================================
+  // PHOTO UPLOAD HANDLING (before/after)
   // ============================================
   const openPhotoDialog = (type: 'before' | 'after') => {
     setPhotoType(type);
@@ -555,13 +604,9 @@ export const DriverPortal: React.FC = () => {
     }
   };
 
-  // ✅ #6: Only show responses that are:
-  //   1. Not dismissed by the driver (checked against persisted localStorage)
-  //   2. Not resolved by the admin (isResolved === false)
+  // Only show responses that are not dismissed and not resolved
   const activeResponses = emergencyResponses.filter(
-    (r) =>
-      !dismissedResponses.includes(r.id) &&
-      !r.isResolved
+    (r) => !dismissedResponses.includes(r.id) && !r.isResolved
   );
 
   // ============================================
@@ -601,7 +646,7 @@ export const DriverPortal: React.FC = () => {
   return (
     <Container maxWidth="xl" sx={{ py: 4 }}>
       <Grid container spacing={3}>
-        {/* ✅ ADMIN RESPONSES TO EMERGENCY ALERTS */}
+        {/* ADMIN RESPONSES TO EMERGENCY ALERTS */}
         {activeResponses.map((response) => (
           <Grid size={{ xs: 12 }} key={response.id}>
             <Alert
@@ -958,7 +1003,7 @@ export const DriverPortal: React.FC = () => {
                         </>
                       )}
 
-                    {/* Report Photos */}
+                    {/* Report Photos (Citizen-submitted) */}
                     {selectedStop.isComplaintStop &&
                       selectedStop.reportPhotos &&
                       selectedStop.reportPhotos.length > 0 && (
@@ -998,7 +1043,12 @@ export const DriverPortal: React.FC = () => {
                             {selectedStop.reportPhotos.map((photo, idx) => (
                               <ImageListItem
                                 key={idx}
-                                onClick={() => setPreviewPhoto(photo)}
+                                onClick={() =>
+                                  openPhotoPreview(
+                                    selectedStop.reportPhotos!,
+                                    idx
+                                  )
+                                }
                                 sx={{
                                   cursor: 'pointer',
                                   transition: 'transform 0.2s',
@@ -1533,10 +1583,10 @@ export const DriverPortal: React.FC = () => {
         </DialogActions>
       </Dialog>
 
-      {/* Photo Preview Dialog */}
+      {/* Enhanced Photo Preview Dialog with Navigation */}
       <Dialog
         open={!!previewPhoto}
-        onClose={() => setPreviewPhoto(null)}
+        onClose={closePhotoPreview}
         maxWidth="lg"
         fullWidth
         slotProps={{
@@ -1556,11 +1606,19 @@ export const DriverPortal: React.FC = () => {
             alignItems: 'center',
           }}
         >
-          Report Photo
-          <IconButton
-            onClick={() => setPreviewPhoto(null)}
-            sx={{ color: 'white' }}
-          >
+          <Typography variant="h6" sx={{ color: 'white' }}>
+            Report Photo
+            {previewPhotoList.length > 1 && (
+              <Typography
+                component="span"
+                variant="body2"
+                sx={{ ml: 2, opacity: 0.7 }}
+              >
+                {previewPhotoIndex + 1} of {previewPhotoList.length}
+              </Typography>
+            )}
+          </Typography>
+          <IconButton onClick={closePhotoPreview} sx={{ color: 'white' }}>
             <CloseIcon />
           </IconButton>
         </DialogTitle>
@@ -1570,8 +1628,27 @@ export const DriverPortal: React.FC = () => {
             justifyContent: 'center',
             alignItems: 'center',
             p: 2,
+            position: 'relative',
+            minHeight: 400,
           }}
         >
+          {/* Previous arrow */}
+          {previewPhotoList.length > 1 && (
+            <IconButton
+              onClick={showPrevPhoto}
+              sx={{
+                position: 'absolute',
+                left: 16,
+                color: 'white',
+                bgcolor: 'rgba(255,255,255,0.15)',
+                '&:hover': { bgcolor: 'rgba(255,255,255,0.3)' },
+                zIndex: 2,
+              }}
+            >
+              <ChevronLeftIcon fontSize="large" />
+            </IconButton>
+          )}
+
           {previewPhoto && (
             <img
               src={previewPhoto}
@@ -1584,7 +1661,46 @@ export const DriverPortal: React.FC = () => {
               }}
             />
           )}
+
+          {/* Next arrow */}
+          {previewPhotoList.length > 1 && (
+            <IconButton
+              onClick={showNextPhoto}
+              sx={{
+                position: 'absolute',
+                right: 16,
+                color: 'white',
+                bgcolor: 'rgba(255,255,255,0.15)',
+                '&:hover': { bgcolor: 'rgba(255,255,255,0.3)' },
+                zIndex: 2,
+              }}
+            >
+              <ChevronRightIcon fontSize="large" />
+            </IconButton>
+          )}
         </DialogContent>
+        <DialogActions
+          sx={{ justifyContent: 'center', pb: 2, gap: 1 }}
+        >
+          {previewPhotoList.length > 1 && (
+            <>
+              <Button
+                onClick={showPrevPhoto}
+                sx={{ color: 'white' }}
+                startIcon={<ChevronLeftIcon />}
+              >
+                Previous
+              </Button>
+              <Button
+                onClick={showNextPhoto}
+                sx={{ color: 'white' }}
+                endIcon={<ChevronRightIcon />}
+              >
+                Next
+              </Button>
+            </>
+          )}
+        </DialogActions>
       </Dialog>
 
       {/* Emergency FAB */}
